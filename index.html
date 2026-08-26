@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CampusXchange — Interactive Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --canvas:#101826;
+    --canvas-soft:#1a2438;
+    --paper:#ECEFEA;
+    --paper-dim:#DEE2DA;
+    --ink:#1B2A41;
+    --ink-soft:#5B6B7F;
+    --line: rgba(27,42,65,0.14);
+    --marigold:#E3A23A;
+    --marigold-deep:#B97C1F;
+    --stamp:#54366B;
+    --good:#3F8F6B;
+    --good-bg:#E4F1EA;
+    --alert:#B4483B;
+    --alert-bg:#F7E7E3;
+    --white:#FFFFFF;
+    --radius-lg:26px;
+    --radius-md:16px;
+    --radius-sm:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--canvas);
+    background-image:radial-gradient(circle at 15% 10%, #1c2942 0%, var(--canvas) 55%);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+  }
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .display{font-family:'Fraunces',serif;}
+
+  .stage{
+    display:flex;
+    gap:36px;
+    max-width:1180px;
+    margin:0 auto;
+    padding:40px 24px 60px;
+    align-items:flex-start;
+    flex-wrap:wrap;
+  }
+
+  /* ---------- Pitch panel ---------- */
+  .pitch{
+    flex:0 0 320px;
+    color:#EDEFF3;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--marigold);
+    margin:0 0 10px;
+  }
+  .wordmark{
+    font-family:'Fraunces',serif;
+    font-weight:700;
+    font-size:34px;
+    margin:0 0 10px;
+    letter-spacing:-0.01em;
+  }
+  .tagline{
+    font-size:14.5px;
+    line-height:1.55;
+    color:#B9C1CE;
+    margin:0 0 22px;
+  }
+  .toggle{
+    display:flex;
+    background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.12);
+    border-radius:999px;
+    padding:4px;
+    gap:4px;
+    margin-bottom:22px;
+  }
+  .toggle button{
+    flex:1;
+    border:none;
+    background:transparent;
+    color:#B9C1CE;
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:12.5px;
+    padding:9px 10px;
+    border-radius:999px;
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .toggle button.active{
+    background:var(--marigold);
+    color:#2A1B04;
+  }
+
+  .stepper{
+    margin-bottom:24px;
+  }
+  .stepper-title{
+    font-size:11px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:#7E8AA0;
+    margin:0 0 12px;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .step-row{
+    display:flex;
+    flex-direction:column;
+    gap:0;
+  }
+  .step{
+    display:flex;
+    gap:12px;
+    position:relative;
+    padding-bottom:20px;
+  }
+  .step:last-child{padding-bottom:0;}
+  .step-dot{
+    width:20px;height:20px;border-radius:50%;
+    background:rgba(255,255,255,0.08);
+    border:1.5px solid rgba(255,255,255,0.22);
+    flex:0 0 20px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:10px;color:#B9C1CE;font-family:'IBM Plex Mono',monospace;
+    z-index:1;
+  }
+  .step.done .step-dot{background:var(--good);border-color:var(--good);color:#fff;}
+  .step.active .step-dot{background:var(--marigold);border-color:var(--marigold);color:#2A1B04;}
+  .step::before{
+    content:'';
+    position:absolute;
+    left:9.5px; top:20px; bottom:0;
+    width:1px;
+    background:rgba(255,255,255,0.18);
+  }
+  .step:last-child::before{display:none;}
+  .step-label{
+    font-size:13px;
+    color:#8B96A9;
+    padding-top:1px;
+  }
+  .step.active .step-label{color:#EDEFF3;font-weight:600;}
+  .step.done .step-label{color:#B9C1CE;}
+
+  .legend{
+    background:rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:var(--radius-md);
+    padding:16px 16px;
+    font-size:12.5px;
+    line-height:1.6;
+    color:#B9C1CE;
+  }
+  .legend p{margin:0 0 8px;}
+  .legend p:last-child{margin:0;}
+  .legend strong{color:#EDEFF3;}
+
+  /* ---------- Phone ---------- */
+  .device-wrap{flex:0 0 auto; display:flex; justify-content:center;}
+  .phone{
+    width:340px;
+    height:700px;
+    background:var(--ink);
+    border-radius:44px;
+    padding:12px;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+    position:relative;
+  }
+  .notch{
+    position:absolute;
+    top:12px;left:50%;transform:translateX(-50%);
+    width:120px;height:22px;
+    background:var(--ink);
+    border-radius:0 0 16px 16px;
+    z-index:5;
+  }
+  .screen{
+    background:var(--paper);
+    width:100%;height:100%;
+    border-radius:32px;
+    overflow:hidden;
+    position:relative;
+    display:flex;
+    flex-direction:column;
+  }
+  .home-indicator{
+    position:absolute;
+    bottom:8px;left:50%;transform:translateX(-50%);
+    width:120px;height:4px;border-radius:4px;
+    background:rgba(255,255,255,0.35);
+    z-index:5;
+  }
+
+  .screen-body{
+    flex:1;
+    overflow-y:auto;
+    padding:18px 16px 14px;
+  }
+  .screen-body::-webkit-scrollbar{width:0;}
+
+  .topbar{
+    display:flex;align-items:center;gap:10px;
+    padding:16px 16px 10px;
+  }
+  .topbar h2{
+    font-family:'Fraunces',serif;
+    font-size:18px;font-weight:600;margin:0;
+    flex:1;
+  }
+  .back-btn{
+    width:30px;height:30px;border-radius:50%;
+    border:1px solid var(--line);
+    background:#fff;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;font-size:14px;
+  }
+
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    font-family:'Inter',sans-serif;font-weight:600;font-size:13.5px;
+    padding:12px 16px;border-radius:12px;border:none;cursor:pointer;
+    width:100%;
+    transition:transform .1s ease;
+  }
+  .btn:active{transform:scale(0.98);}
+  .btn-primary{background:var(--ink);color:#fff;}
+  .btn-accent{background:var(--marigold);color:#2A1B04;}
+  .btn-ghost{background:transparent;color:var(--ink);border:1px solid var(--line);}
+  .btn-danger{background:var(--alert-bg);color:var(--alert);}
+  .btn-sm{width:auto;padding:8px 12px;font-size:12.5px;border-radius:9px;}
+
+  .card{
+    background:#fff;border:1px solid var(--line);border-radius:var(--radius-md);
+    padding:14px;margin-bottom:12px;
+  }
+
+  /* Mode switcher */
+  .mode-switch{display:flex;gap:8px;padding:0 16px 12px;}
+  .mode-chip{
+    flex:1;text-align:center;padding:10px 6px;border-radius:12px;
+    background:#fff;border:1px solid var(--line);
+    font-size:12px;font-weight:600;cursor:pointer;color:var(--ink-soft);
+  }
+  .mode-chip.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+
+  .cat-row{display:flex;gap:8px;padding:0 16px 14px;overflow-x:auto;}
+  .cat-chip{
+    flex:0 0 auto;padding:6px 12px;border-radius:999px;
+    background:var(--paper-dim);font-size:11.5px;font-weight:600;color:var(--ink-soft);
+    white-space:nowrap;
+  }
+
+  .listing-row{
+    display:flex;gap:12px;background:#fff;border:1px solid var(--line);
+    border-radius:var(--radius-md);padding:12px;margin-bottom:10px;cursor:pointer;
+  }
+  .listing-emoji{
+    width:54px;height:54px;border-radius:12px;background:var(--paper-dim);
+    display:flex;align-items:center;justify-content:center;font-size:24px;flex:0 0 54px;
+  }
+  .listing-info{flex:1;min-width:0;}
+  .listing-title{font-size:13.5px;font-weight:600;margin:0 0 3px;line-height:1.3;}
+  .listing-price{font-size:13px;font-weight:700;color:var(--marigold-deep);margin:0 0 3px;}
+  .listing-meta{font-size:11px;color:var(--ink-soft);margin:0;}
+  .flag-star{color:var(--marigold-deep);font-size:10px;font-family:'IBM Plex Mono',monospace;}
+
+  .badge{
+    display:inline-flex;align-items:center;gap:4px;
+    font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:999px;
+  }
+  .badge-good{background:var(--good-bg);color:var(--good);}
+  .badge-alert{background:var(--alert-bg);color:var(--alert);}
+  .badge-neutral{background:var(--paper-dim);color:var(--ink-soft);}
+  .badge-marigold{background:#FBEFDA;color:var(--marigold-deep);}
+
+  /* Chat */
+  .msg-row{display:flex;margin-bottom:10px;}
+  .msg-row.me{justify-content:flex-end;}
+  .bubble{
+    max-width:78%;padding:10px 13px;border-radius:16px;font-size:13px;line-height:1.4;
+  }
+  .msg-row.them .bubble{background:#fff;border:1px solid var(--line);border-bottom-left-radius:4px;}
+  .msg-row.me .bubble{background:var(--ink);color:#fff;border-bottom-right-radius:4px;}
+  .offer-card{
+    background:#FBEFDA;border:1px solid #EFD5A6;border-radius:14px;
+    padding:12px;margin:6px 0 12px;
+  }
+  .offer-card .oa{font-size:11px;color:var(--marigold-deep);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px;}
+  .offer-card .oamt{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600;margin-bottom:2px;}
+  .offer-card .obrk{font-size:11.5px;color:var(--ink-soft);margin-bottom:10px;}
+  .offer-actions{display:flex;gap:8px;}
+
+  /* Stamp */
+  .stamp-wrap{display:flex;justify-content:center;margin:18px 0 6px;}
+  .stamp{
+    width:150px;height:150px;border-radius:50%;
+    border:3px double var(--stamp);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:var(--stamp);
+    transform:rotate(-8deg);
+    font-family:'IBM Plex Mono',monospace;
+    text-align:center;
+    animation:stampIn .4s cubic-bezier(.2,1.4,.4,1);
+    opacity:0.92;
+  }
+  .stamp .sm-top{font-size:9px;letter-spacing:.12em;margin-bottom:4px;}
+  .stamp .sm-main{font-size:14px;font-weight:700;line-height:1.15;padding:0 14px;}
+  .stamp .sm-bottom{font-size:9px;letter-spacing:.12em;margin-top:4px;}
+  @keyframes stampIn{
+    0%{transform:scale(1.8) rotate(-8deg);opacity:0;}
+    70%{transform:scale(0.95) rotate(-8deg);opacity:1;}
+    100%{transform:scale(1) rotate(-8deg);opacity:.92;}
+  }
+
+  /* QR */
+  .qr-wrap{display:flex;justify-content:center;margin:10px 0 4px;}
+  .qr-grid{
+    display:grid;
+    grid-template-columns:repeat(7,10px);
+    grid-template-rows:repeat(7,10px);
+    gap:2px;background:#fff;padding:14px;border-radius:14px;border:1px solid var(--line);
+  }
+  .qr-cell{width:10px;height:10px;border-radius:2px;background:var(--paper-dim);}
+  .qr-cell.on{background:var(--ink);}
+
+  /* photo tiles */
+  .photo-row{display:flex;gap:10px;margin-bottom:14px;}
+  .photo-tile{
+    flex:1;aspect-ratio:1;border-radius:14px;border:1.5px dashed var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:22px;
+    background:#fff;cursor:pointer;color:var(--ink-soft);flex-direction:column;gap:4px;
+  }
+  .photo-tile.done{border-style:solid;border-color:var(--good);color:var(--good);background:var(--good-bg);}
+  .photo-tile span{font-size:10.5px;font-weight:600;}
+
+  /* bottom nav */
+  .bottom-nav{
+    display:flex;border-top:1px solid var(--line);background:#fff;padding:8px 6px 20px;
+  }
+  .nav-item{flex:1;text-align:center;font-size:10px;color:var(--ink-soft);font-weight:600;cursor:pointer;padding-top:4px;}
+  .nav-item .ni-ic{font-size:16px;display:block;margin-bottom:2px;}
+  .nav-item.active{color:var(--ink);}
+
+  .sticky-cta{
+    padding:12px 16px 16px;background:var(--paper);border-top:1px solid var(--line);
+  }
+
+  .verify-field{margin-bottom:12px;}
+  .verify-field label{font-size:11.5px;font-weight:600;color:var(--ink-soft);display:block;margin-bottom:5px;}
+  .verify-field input{
+    width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);
+    font-family:'IBM Plex Mono',monospace;font-size:13px;background:#fff;
+  }
+
+  .rating-row{display:flex;gap:4px;justify-content:center;margin:10px 0 4px;font-size:22px;}
+  .rating-row span{cursor:pointer;opacity:.35;}
+  .rating-row span.on{opacity:1;}
+
+  .toast{
+    position:absolute;bottom:76px;left:16px;right:16px;
+    background:var(--ink);color:#fff;font-size:12.5px;
+    padding:10px 14px;border-radius:12px;text-align:center;
+    box-shadow:0 10px 24px rgba(0,0,0,.25);
+    z-index:20;
+    animation:toastIn .18s ease;
+  }
+  @keyframes toastIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+  /* ---------- Admin ---------- */
+  .admin-wrap{
+    flex:1;min-width:320px;
+    background:var(--paper);
+    border-radius:var(--radius-lg);
+    padding:22px;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,0.5);
+  }
+  .admin-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+  .admin-head h2{font-family:'Fraunces',serif;font-size:20px;margin:0;}
+  .admin-tabs{display:flex;gap:6px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px;}
+  .admin-tabs button{
+    border:none;background:transparent;padding:8px 16px;border-radius:999px;
+    font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;
+  }
+  .admin-tabs button.active{background:var(--ink);color:#fff;}
+
+  table.admin-table{width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;border:1px solid var(--line);}
+  table.admin-table th{
+    text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--ink-soft);padding:10px 14px;border-bottom:1px solid var(--line);background:var(--paper-dim);
+  }
+  table.admin-table td{padding:12px 14px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle;}
+  table.admin-table tr:last-child td{border-bottom:none;}
+  .row-decided{opacity:.45;}
+  .row-new{background:#FBEFDA;}
+  .score-pill{font-family:'IBM Plex Mono',monospace;font-size:11.5px;padding:3px 8px;border-radius:8px;font-weight:600;}
+  .score-high{background:var(--alert-bg);color:var(--alert);}
+  .score-med{background:#FBEFDA;color:var(--marigold-deep);}
+  .score-low{background:var(--good-bg);color:var(--good);}
+  .row-actions{display:flex;gap:6px;}
+  .admin-select{font-family:'Inter',sans-serif;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);margin-right:6px;}
+  .empty-note{padding:26px;text-align:center;color:var(--ink-soft);font-size:13px;}
+
+  @media (max-width:900px){
+    .stage{flex-direction:column;align-items:center;}
+    .pitch{flex:0 0 auto;width:100%;max-width:400px;}
+    .admin-wrap{width:100%;}
+  }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <aside class="pitch">
+    <p class="eyebrow">Interactive prototype</p>
+    <h1 class="wordmark">CampusXchange</h1>
+    <p class="tagline">Every screen below is real and clickable. Payments, KYC lookup, and AI moderation scoring are mocked with sample data — this demonstrates the workflow your proposal describes, not the finished backend.</p>
+
+    <div class="toggle">
+      <button id="tgStudent" class="active" onclick="setView('student')">Student App</button>
+      <button id="tgAdmin" onclick="setView('admin')">Admin Dashboard</button>
+    </div>
+
+    <div class="stepper" id="stepperWrap"></div>
+
+    <div class="legend">
+      <p><strong>What's real:</strong> navigation, the browse → chat → escrow → QR handoff loop, and the link between a reported issue and the admin dispute queue.</p>
+      <p><strong>What's mocked:</strong> the actual payment, the roll-number/KYC check, and the AI flag score — all sample data standing in for those API calls.</p>
+    </div>
+  </aside>
+
+  <div class="device-wrap" id="deviceWrap">
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen" id="screen"></div>
+      <div class="home-indicator"></div>
+    </div>
+  </div>
+
+  <div class="admin-wrap" id="adminWrap" style="display:none;"></div>
+</div>
+
+<script>
+/* ---------------- Mock data ---------------- */
+const LISTINGS = [
+  {id:'s1',mode:'sell',title:'Scientific Calculator — fx-991ES',emoji:'🧮',price:450,condition:'Like new',loc:'Hostel Block A • 0.3 km',seller:{name:'Ananya R.',initials:'AR',rating:4.8},desc:"Barely used, all functions tested and working. Selling because I'm graduating this semester — comes with the original case and manual.",flagship:true},
+  {id:'s2',mode:'sell',title:'Physics Textbook Set (NCERT + H.C. Verma)',emoji:'📘',price:350,condition:'Good',loc:'Hostel Block C • 0.4 km',seller:{name:'Rohit K.',initials:'RK',rating:4.6},desc:'Both books together, a few pencil notes in the margins but no torn or missing pages.'},
+  {id:'s3',mode:'sell',title:'Yonex Badminton Racket',emoji:'🏸',price:600,condition:'Good',loc:'Hostel Block D • 0.6 km',seller:{name:'Priya S.',initials:'PS',rating:4.9},desc:'Restrung once, grip is slightly worn but the frame is in great shape.'},
+  {id:'l1',mode:'lend',title:'Canon 1500D DSLR Camera',emoji:'📷',rent:120,deposit:2000,loc:'Hostel Block B • 0.5 km',seller:{name:'Karan V.',initials:'KV',rating:4.7},desc:'Great for fest coverage or a photography assignment. Comes with an 18-55mm kit lens and a spare battery.',flagship:true},
+  {id:'l2',mode:'lend',title:'Lab Coat (Size M)',emoji:'🥼',rent:20,deposit:100,loc:'Hostel Block C • 0.2 km',seller:{name:'Simran G.',initials:'SG',rating:4.5},desc:'Freshly washed, no stains — perfect for a one-off practical or viva.'},
+  {id:'l3',mode:'lend',title:'Yamaha F310 Acoustic Guitar',emoji:'🎸',rent:50,deposit:500,loc:'Hostel Block A • 0.7 km',seller:{name:'Aditya M.',initials:'AM',rating:4.8},desc:'Recently restrung, comes with a soft case and a spare set of strings.'},
+  {id:'e1',mode:'exchange',title:'Data Structures Textbook',emoji:'🔄',want:'Wants: DBMS Textbook (any edition)',loc:'Hostel Block C • 0.3 km',seller:{name:'Neha T.',initials:'NT',rating:4.6},desc:"Clean copy, all chapters intact. Open to a small top-up if your book is a newer edition.",flagship:true},
+  {id:'e2',mode:'exchange',title:'Formal Shirt (Size L)',emoji:'👔',want:'Wants: Formal Shirt (Size XL)',loc:'Hostel Block D • 0.5 km',seller:{name:'Yash P.',initials:'YP',rating:4.4},desc:'Worn twice for interviews, going up a size — clean swap, no top-up needed.'}
+];
+const CATS = {sell:['Books','Electronics','Sports','Lab Gear'],lend:['Electronics','Lab Gear','Music','Fest Kit'],exchange:['Books','Apparel','Electronics']};
+const MODE_LABEL = {sell:'Sell',lend:'Lend & Borrow',exchange:'Exchange'};
+
+const MODERATION_SEED = [
+  {id:'m1',title:'iPhone 13 Pro — unlocked',by:'Unknown user',score:76,level:'high',note:'Price far below market + stock photo detected',status:'pending'},
+  {id:'m2',title:'Chemistry Lab Manual (photocopy)',by:'Vikram J.',score:22,level:'low',note:'Possible copyright concern — flagged for review',status:'pending'},
+  {id:'m3',title:'Bluetooth Speaker — JBL Go 2',by:'Fatima N.',score:8,level:'low',note:'Routine listing, no concerns detected',status:'pending'}
+];
+const DISPUTE_SEED = [
+  {id:'D-1042',txn:'CX-L1-8842',item:'Canon 1500D DSLR Camera',reason:'Return delayed by 2 days',status:'under_review',isNew:false},
+  {id:'D-1039',txn:'CX-L3-2210',item:'Yamaha F310 Guitar',reason:'Minor scratch not disclosed',status:'resolved',resolution:'Partial deposit refund (₹150)',isNew:false}
+];
+
+/* ---------------- State ---------------- */
+let state = {
+  view:'student',
+  screen:'signup',
+  mode:'sell',
+  listingId:null,
+  offerAccepted:false,
+  dealAmount:0,
+  dealBreakdown:'',
+  handoffStep:'qr',
+  photosCaptured:false,
+  rating:0,
+  toast:null,
+  adminTab:'moderation',
+  moderation: JSON.parse(JSON.stringify(MODERATION_SEED)),
+  disputes: JSON.parse(JSON.stringify(DISPUTE_SEED))
+};
+let qrTimer = null;
+let qrSeconds = 600;
+
+function listingById(id){ return LISTINGS.find(l=>l.id===id); }
+function fmt(n){ return '₹'+n.toLocaleString('en-IN'); }
+
+function dealFor(listing){
+  if(listing.mode==='sell') return {amount:listing.price, breakdown:'Item price, held in escrow'};
+  if(listing.mode==='lend'){
+    const rent = listing.rent*3;
+    return {amount:rent+listing.deposit, breakdown:fmt(rent)+' rent (3 days) + '+fmt(listing.deposit)+' deposit'};
+  }
+  if(listing.id==='e1') return {amount:50, breakdown:'Swap + ₹50 top-up (newer edition)'};
+  return {amount:0, breakdown:'Straight swap — no payment needed'};
+}
+
+function chatSeed(listing){
+  if(listing.id==='s1') return [
+    {from:'them',text:"Hey! Yes, it's still available 🙂"},
+    {from:'me',text:'Nice — would you do ₹400 for it?'},
+    {from:'them',text:"It's basically unused, I can do ₹420 final.",offer:true}
+  ];
+  if(listing.id==='l1') return [
+    {from:'them',text:"It's free this weekend if you need it for a shoot."},
+    {from:'me',text:'Perfect — can I borrow it for 3 days?'},
+    {from:'them',text:'Sure — 3 days at ₹120/day plus the ₹2,000 deposit, refunded on return.',offer:true}
+  ];
+  if(listing.id==='e1') return [
+    {from:'them',text:"I have the DBMS book you're after!"},
+    {from:'me',text:'Would you swap it for my DS textbook?'},
+    {from:'them',text:"Deal — mine's a newer edition though, could you add ₹50?",offer:true}
+  ];
+  const deal = dealFor(listing);
+  return [
+    {from:'them',text:"Hi! Yes, it's still up for grabs."},
+    {from:'me',text:"Sounds good — I'm interested, can we finalize?"},
+    {from:'them',text: deal.amount>0 ? ('Works for me — '+deal.breakdown+'.') : "Works for me — happy to go ahead.", offer:true}
+  ];
+}
+
+function simpleHash(str){ let h=0; for(let i=0;i<str.length;i++){ h=(h*31+str.charCodeAt(i))>>>0; } return h; }
+function qrCells(seed){
+  let h = simpleHash(seed)||1;
+  const cells=[];
+  for(let i=0;i<49;i++){ h=(h*1103515245+12345)>>>0; cells.push((h>>>16)%3===0); }
+  [0,1,7,8,5,6,12,13,35,36,42,43].forEach(i=>cells[i]=true);
+  return cells;
+}
+
+/* ---------------- Navigation ---------------- */
+function go(screen){
+  state.screen = screen;
+  state.toast = null;
+  if(screen!=='handoff' && qrTimer){ clearInterval(qrTimer); qrTimer=null; }
+  render();
+}
+function selectMode(mode){ state.mode = mode; render(); }
+function openListing(id){ state.listingId=id; state.offerAccepted=false; state.photosCaptured=false; go('detail'); }
+function setView(view){
+  state.view = view;
+  document.getElementById('tgStudent').classList.toggle('active', view==='student');
+  document.getElementById('tgAdmin').classList.toggle('active', view==='admin');
+  document.getElementById('deviceWrap').style.display = view==='student' ? 'flex' : 'none';
+  document.getElementById('adminWrap').style.display = view==='admin' ? 'block' : 'none';
+  render();
+}
+function showToast(msg){
+  state.toast = msg;
+  render();
+  setTimeout(()=>{ state.toast=null; const t=document.getElementById('toastEl'); if(t) t.remove(); }, 1800);
+}
+function acceptOffer(){
+  const listing = listingById(state.listingId);
+  const deal = dealFor(listing);
+  state.offerAccepted = true;
+  state.dealAmount = deal.amount;
+  state.dealBreakdown = deal.breakdown;
+  render();
+}
+function confirmEscrow(){
+  go('handoff');
+  state.handoffStep='qr';
+  qrSeconds = 600;
+  startQrTimer();
+}
+function startQrTimer(){
+  if(qrTimer) clearInterval(qrTimer);
+  qrTimer = setInterval(()=>{
+    qrSeconds--;
+    const el = document.getElementById('qrCountdown');
+    if(el){ el.textContent = fmtCountdown(qrSeconds); }
+    if(qrSeconds<=0){ clearInterval(qrTimer); }
+  },1000);
+}
+function fmtCountdown(s){ const m=Math.floor(s/60), sec=s%60; return (m<10?'0':'')+m+':'+(sec<10?'0':'')+sec; }
+function simulateScan(){ state.handoffStep='photos'; render(); }
+function capturePhotos(){ state.photosCaptured = true; render(); }
+function confirmHandoff(){ if(qrTimer){clearInterval(qrTimer); qrTimer=null;} go('completed'); }
+function setRating(n){ state.rating=n; render(); }
+function reportIssue(){
+  const listing = listingById(state.listingId);
+  const exists = state.disputes.some(d=>d.txn === 'CX-'+listing.id.toUpperCase()+'-USER');
+  if(!exists){
+    state.disputes.unshift({
+      id:'D-'+Math.floor(1000+Math.random()*8999),
+      txn:'CX-'+listing.id.toUpperCase()+'-USER',
+      item:listing.title,
+      reason:'Item condition did not match the listing description',
+      status:'open',
+      isNew:true
+    });
+  }
+  go('disputed');
+}
+function goToAdminDisputes(){ setView('admin'); state.adminTab='disputes'; render(); }
+function setAdminTab(tab){ state.adminTab=tab; render(); }
+function decideModeration(id, decision){
+  const item = state.moderation.find(m=>m.id===id);
+  if(item) item.status = decision;
+  render();
+}
+function resolveDispute(id){
+  const sel = document.getElementById('resSel-'+id);
+  const d = state.disputes.find(x=>x.id===id);
+  if(d){
+    d.status='resolved';
+    d.resolution = sel ? sel.value : 'No fault found';
+    d.isNew=false;
+  }
+  render();
+}
+
+/* ---------------- Templates ---------------- */
+function tplTopbar(title, back){
+  return `<div class="topbar">
+    ${back? `<div class="back-btn" onclick="${back}">←</div>` : ''}
+    <h2>${title}</h2>
+  </div>`;
+}
+
+function tplSignup(){
+  return `
+  <div class="screen-body" style="justify-content:center;display:flex;flex-direction:column;">
+    <p class="eyebrow" style="color:var(--marigold-deep);">Verified access</p>
+    <h2 class="display" style="font-size:22px;margin:0 0 6px;">Sign up to CampusXchange</h2>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 20px;">Gated by your college email + roll number — no ID scan or third-party KYC vendor at this stage.</p>
+    <div class="verify-field">
+      <label>College email</label>
+      <input type="text" value="ananya.r@thapar.edu" readonly />
+    </div>
+    <div class="verify-field">
+      <label>Thapar ID (roll number)</label>
+      <input type="text" value="102203045" readonly />
+    </div>
+    <button class="btn btn-accent" onclick="go('verifying')">Send OTP & verify</button>
+  </div>`;
+}
+
+function tplVerifying(){
+  setTimeout(()=>{ if(state.screen==='verifying'){ go('home'); } }, 900);
+  return `
+  <div class="screen-body" style="justify-content:center;display:flex;flex-direction:column;align-items:center;text-align:center;">
+    <div class="stamp-wrap">
+      <div class="stamp">
+        <div class="sm-top">THAPAR · IET</div>
+        <div class="sm-main">VERIFIED<br/>STUDENT</div>
+        <div class="sm-bottom">102203045</div>
+      </div>
+    </div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin-top:6px;">Checking roll number format & registrar list…</p>
+  </div>`;
+}
+
+function tplHome(){
+  const items = LISTINGS.filter(l=>l.mode===state.mode);
+  return `
+  <div class="screen-body" style="padding-top:16px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <div style="flex:1;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">🔍 Search listings…</div>
+      <div style="font-size:11px;color:var(--ink-soft);">📍 Block C</div>
+    </div>
+    <div class="mode-switch" style="padding:0 0 12px;">
+      ${Object.keys(MODE_LABEL).map(m=>`<div class="mode-chip ${state.mode===m?'active':''}" onclick="selectMode('${m}')">${MODE_LABEL[m]}</div>`).join('')}
+    </div>
+    <div class="cat-row" style="padding:0 0 14px;">
+      ${CATS[state.mode].map(c=>`<div class="cat-chip">${c}</div>`).join('')}
+    </div>
+    ${items.map(l=>`
+      <div class="listing-row" onclick="openListing('${l.id}')">
+        <div class="listing-emoji">${l.emoji}</div>
+        <div class="listing-info">
+          <p class="listing-title">${l.title} ${l.flagship?'<span class="flag-star">★ full demo</span>':''}</p>
+          <p class="listing-price">${l.mode==='sell'?fmt(l.price):l.mode==='lend'?fmt(l.rent)+'/day':l.want}</p>
+          <p class="listing-meta">${l.loc}</p>
+        </div>
+      </div>
+    `).join('')}
+  </div>
+  ${tplBottomNav('home')}`;
+}
+
+function tplDetail(){
+  const l = listingById(state.listingId);
+  return `
+  ${tplTopbar('Listing', "go('home')")}
+  <div class="screen-body">
+    <div style="width:100%;aspect-ratio:1.6;background:var(--paper-dim);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:56px;margin-bottom:14px;">${l.emoji}</div>
+    <h2 class="display" style="font-size:18px;margin:0 0 6px;">${l.title}</h2>
+    <p style="font-size:15px;font-weight:700;color:var(--marigold-deep);margin:0 0 10px;">${l.mode==='sell'?fmt(l.price):l.mode==='lend'?fmt(l.rent)+' / day · '+fmt(l.deposit)+' deposit':l.want}</p>
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <span class="badge badge-neutral">${l.mode==='lend'?'For rent':l.condition||'For exchange'}</span>
+      <span class="badge badge-good">✓ Moderation approved</span>
+    </div>
+    <p style="font-size:13px;line-height:1.55;color:var(--ink-soft);margin:0 0 16px;">${l.desc}</p>
+    <div class="card" style="display:flex;align-items:center;gap:10px;">
+      <div style="width:36px;height:36px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">${l.seller.initials}</div>
+      <div style="flex:1;">
+        <p style="margin:0;font-size:13px;font-weight:600;">${l.seller.name}</p>
+        <p style="margin:0;font-size:11px;color:var(--ink-soft);">★ ${l.seller.rating} · ${l.loc}</p>
+      </div>
+      <span class="badge badge-marigold">Verified</span>
+    </div>
+  </div>
+  <div class="sticky-cta">
+    <button class="btn btn-primary" onclick="go('chat')">${l.mode==='sell'?'Chat to negotiate':l.mode==='lend'?'Request to borrow':'Propose exchange'}</button>
+  </div>`;
+}
+
+function tplChat(){
+  const l = listingById(state.listingId);
+  const seed = chatSeed(l);
+  const deal = dealFor(l);
+  let html = seed.map(m=>{
+    if(m.offer){
+      return `<div class="offer-card">
+        <div class="oa">Offer from ${l.seller.name.split(' ')[0]}</div>
+        <div class="oamt">${deal.amount>0?fmt(deal.amount):'Swap only'}</div>
+        <div class="obrk">${deal.breakdown}</div>
+        ${state.offerAccepted ? `<span class="badge badge-good">✓ Accepted</span>` : `
+        <div class="offer-actions">
+          <button class="btn btn-accent btn-sm" onclick="acceptOffer()">Accept</button>
+          <button class="btn btn-ghost btn-sm" onclick="showToast('Counter-offers are mocked in this prototype')">Counter</button>
+        </div>`}
+      </div>`;
+    }
+    return `<div class="msg-row ${m.from==='me'?'me':'them'}"><div class="bubble">${m.text}</div></div>`;
+  }).join('');
+  if(state.offerAccepted){
+    html += `<div class="msg-row me"><div class="bubble">Deal — let's lock it in!</div></div>`;
+  }
+  return `
+  ${tplTopbar(l.seller.name, "go('detail')")}
+  <div class="screen-body">${html}</div>
+  <div class="sticky-cta">
+    ${state.offerAccepted
+      ? `<button class="btn btn-primary" onclick="go('checkout')">Finalize & go to checkout</button>`
+      : `<button class="btn btn-ghost" disabled style="opacity:.5;">Accept the offer above to continue</button>`}
+  </div>
+  ${state.toast? tplToast() : ''}`;
+}
+
+function tplCheckout(){
+  const l = listingById(state.listingId);
+  const spot = l.loc.split('•')[0].trim();
+  return `
+  ${tplTopbar('Checkout', "go('chat')")}
+  <div class="screen-body">
+    <div class="card">
+      <p style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin:0 0 8px;">Transaction summary</p>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:4px;">
+        <div style="font-size:26px;">${l.emoji}</div>
+        <div><p style="margin:0;font-size:13px;font-weight:600;">${l.title}</p><p style="margin:0;font-size:11px;color:var(--ink-soft);">with ${l.seller.name}</p></div>
+      </div>
+    </div>
+    <div class="card">
+      <p style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin:0 0 8px;">Escrow hold — shared transaction core</p>
+      <p style="font-size:20px;font-weight:700;font-family:'IBM Plex Mono',monospace;margin:0 0 4px;">${state.dealAmount>0?fmt(state.dealAmount):'₹0'}</p>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0;">${state.dealBreakdown}</p>
+    </div>
+    <div class="card">
+      <p style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin:0 0 8px;">Suggested meeting point</p>
+      <p style="font-size:13px;font-weight:600;margin:0;">📍 ${spot} entrance</p>
+      <p style="font-size:11.5px;color:var(--ink-soft);margin:4px 0 0;">Pre-seeded, on-campus landmark — pilot scope keeps meetups physical & on-campus.</p>
+    </div>
+  </div>
+  <div class="sticky-cta">
+    <button class="btn btn-primary" onclick="confirmEscrow()">${state.dealAmount>0? 'Confirm & hold '+fmt(state.dealAmount)+' in escrow' : 'Confirm swap & issue QR'}</button>
+  </div>`;
+}
+
+function tplHandoff(){
+  const l = listingById(state.listingId);
+  if(state.handoffStep==='qr'){
+    const cells = qrCells(l.id);
+    return `
+    ${tplTopbar('QR handoff', "go('checkout')")}
+    <div class="screen-body" style="text-align:center;">
+      <span class="badge badge-good" style="margin-bottom:10px;">✓ Escrow held</span>
+      <p style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 4px;">Show this at the meetup — it's single-use and time-bound.</p>
+      <div class="qr-wrap">
+        <div class="qr-grid">${cells.map(c=>`<div class="qr-cell ${c?'on':''}"></div>`).join('')}</div>
+      </div>
+      <p class="mono" style="font-size:13px;margin:10px 0 2px;">CX-${l.id.toUpperCase()}-USER</p>
+      <p class="mono" style="font-size:12px;color:var(--alert);margin:0 0 18px;">Expires in <span id="qrCountdown">${fmtCountdown(qrSeconds)}</span></p>
+    </div>
+    <div class="sticky-cta">
+      <button class="btn btn-primary" onclick="simulateScan()">Simulate scan at meetup</button>
+      <button class="btn btn-ghost" style="margin-top:8px;" onclick="reportIssue()">Something went wrong instead</button>
+    </div>`;
+  }
+  return `
+  ${tplTopbar('Condition photos', null)}
+  <div class="screen-body">
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 12px;">QR scanned ✓ — capture condition photos before the handoff is marked complete.</p>
+    <div class="photo-row">
+      <div class="photo-tile ${state.photosCaptured?'done':''}" onclick="capturePhotos()">
+        ${state.photosCaptured? '✓' : '📷'}<span>${state.photosCaptured?'Captured':'Item overall'}</span>
+      </div>
+      <div class="photo-tile ${state.photosCaptured?'done':''}" onclick="capturePhotos()">
+        ${state.photosCaptured? '✓' : '📷'}<span>${state.photosCaptured?'Captured':'Close-up'}</span>
+      </div>
+    </div>
+    <div class="card" style="font-size:12px;color:var(--ink-soft);">These photos are what a dispute gets compared against later — stored encrypted, tied to this transaction only.</div>
+  </div>
+  <div class="sticky-cta">
+    <button class="btn btn-primary" ${state.photosCaptured?'':'disabled style="opacity:.5;"'} onclick="${state.photosCaptured?'confirmHandoff()':''}">Confirm handoff & release escrow</button>
+    <button class="btn btn-ghost" style="margin-top:8px;" onclick="reportIssue()">Something went wrong instead</button>
+  </div>`;
+}
+
+function tplCompleted(){
+  const l = listingById(state.listingId);
+  return `
+  <div class="screen-body" style="text-align:center;">
+    <div class="stamp-wrap">
+      <div class="stamp">
+        <div class="sm-top">CAMPUSXCHANGE</div>
+        <div class="sm-main">HANDOFF<br/>CONFIRMED</div>
+        <div class="sm-bottom">ESCROW RELEASED</div>
+      </div>
+    </div>
+    <h2 class="display" style="font-size:18px;margin:14px 0 4px;">All done!</h2>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 16px;">${l.title} — transaction closed and logged for TLC / completion metrics.</p>
+    <div class="card" style="text-align:left;">
+      <p style="font-size:12.5px;margin:0 0 6px;">✓ Escrow released to ${l.seller.name.split(' ')[0]}</p>
+      <p style="font-size:12.5px;margin:0 0 6px;">✓ Condition photos on file</p>
+      <p style="font-size:12.5px;margin:0;">✓ Transaction marked completed</p>
+    </div>
+    <p style="font-size:11.5px;color:var(--ink-soft);margin:14px 0 4px;">Rate this transaction</p>
+    <div class="rating-row">
+      ${[1,2,3,4,5].map(n=>`<span class="${state.rating>=n?'on':''}" onclick="setRating(${n})">★</span>`).join('')}
+    </div>
+  </div>
+  <div class="sticky-cta">
+    <button class="btn btn-primary" onclick="go('home')">Back to home</button>
+    <button class="btn btn-ghost" style="margin-top:8px;" onclick="reportIssue()">Report an issue instead</button>
+  </div>`;
+}
+
+function tplDisputed(){
+  const l = listingById(state.listingId);
+  return `
+  <div class="screen-body" style="text-align:center;">
+    <span class="badge badge-alert" style="margin-bottom:14px;">Dispute submitted</span>
+    <h2 class="display" style="font-size:18px;margin:0 0 6px;">We've flagged this for review</h2>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 16px;">${l.title} — awaiting admin review against the stored condition photos.</p>
+    <div class="card" style="text-align:left;">
+      <p style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin:0 0 6px;">Reason</p>
+      <p style="font-size:13px;margin:0 0 10px;">Item condition did not match the listing description</p>
+      <p style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin:0 0 6px;">Status</p>
+      <span class="badge badge-alert">Open — awaiting review</span>
+    </div>
+    <p style="font-size:11.5px;color:var(--ink-soft);margin:14px 0 0;">This now shows up in the Admin Dashboard's Disputes queue.</p>
+  </div>
+  <div class="sticky-cta">
+    <button class="btn btn-primary" onclick="goToAdminDisputes()">View in Admin Dashboard</button>
+    <button class="btn btn-ghost" style="margin-top:8px;" onclick="go('home')">Back to home</button>
+  </div>`;
+}
+
+function tplToast(){
+  return `<div class="toast" id="toastEl">${state.toast}</div>`;
+}
+
+function tplBottomNav(active){
+  const items = [['home','🏠','Home'],['chats','💬','Chats'],['activity','📋','Activity'],['profile','👤','Profile']];
+  return `<div class="bottom-nav">
+    ${items.map(([k,ic,label])=>`<div class="nav-item ${active===k?'active':''}" onclick="${k==='home'?"go('home')":`showToast('${label} ships in a later iteration')`}"><span class="ni-ic">${ic}</span>${label}</div>`).join('')}
+  </div>`;
+}
+
+function renderScreen(){
+  const map = {
+    signup: tplSignup, verifying: tplVerifying, home: tplHome, detail: tplDetail,
+    chat: tplChat, checkout: tplCheckout, handoff: tplHandoff, completed: tplCompleted, disputed: tplDisputed
+  };
+  const fn = map[state.screen] || tplHome;
+  return fn() + (state.toast && state.screen!=='chat' ? tplToast() : '');
+}
+
+/* ---------------- Stepper ---------------- */
+function stepIndex(){
+  const s = state.screen;
+  if(s==='signup'||s==='verifying') return 0;
+  if(s==='home'||s==='detail'||s==='chat') return 1;
+  if(s==='checkout'||s==='handoff') return 2;
+  return 3;
+}
+function renderStepper(){
+  const labels = ['Sign up & verify','Browse & negotiate','Escrow & QR handoff','Completed'];
+  const idx = state.view==='admin' ? -1 : stepIndex();
+  return `<p class="stepper-title">Where you are</p>
+  <div class="step-row">
+    ${labels.map((lab,i)=>`<div class="step ${i<idx?'done':''} ${i===idx?'active':''}">
+      <div class="step-dot">${i<idx?'✓':i+1}</div>
+      <div class="step-label">${lab}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+/* ---------------- Admin ---------------- */
+function renderAdmin(){
+  const tabs = `<div class="admin-tabs">
+    <button class="${state.adminTab==='moderation'?'active':''}" onclick="setAdminTab('moderation')">Moderation queue</button>
+    <button class="${state.adminTab==='disputes'?'active':''}" onclick="setAdminTab('disputes')">Disputes</button>
+  </div>`;
+
+  if(state.adminTab==='moderation'){
+    const rows = state.moderation.map(m=>`
+      <tr class="${m.status!=='pending'?'row-decided':''}">
+        <td><strong>${m.title}</strong><br/><span style="color:var(--ink-soft);font-size:11.5px;">${m.by}</span></td>
+        <td><span class="score-pill score-${m.level}">${m.score}/100 · ${m.level}</span></td>
+        <td style="color:var(--ink-soft);font-size:12px;">${m.note}</td>
+        <td>${m.status==='pending'
+            ? `<div class="row-actions"><button class="btn btn-accent btn-sm" onclick="decideModeration('${m.id}','approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="decideModeration('${m.id}','rejected')">Reject</button></div>`
+            : `<span class="badge ${m.status==='approved'?'badge-good':'badge-alert'}">${m.status==='approved'?'Approved':'Rejected'} — you</span>`}
+        </td>
+      </tr>`).join('');
+    return `<div class="admin-head"><h2>Moderation queue</h2>${tabs}</div>
+    <table class="admin-table">
+      <tr><th>Listing</th><th>AI flag score</th><th>Note</th><th>Decision</th></tr>
+      ${rows}
+    </table>
+    <p style="font-size:11.5px;color:var(--ink-soft);margin-top:10px;">Scores are mocked — in the real system, an off-the-shelf moderation API assigns this, and a human always makes the final call.</p>`;
+  }
+
+  const rows = state.disputes.map(d=>`
+    <tr class="${d.isNew?'row-new':''}">
+      <td class="mono" style="font-size:12px;">${d.id}<br/><span style="color:var(--ink-soft);">${d.txn}</span></td>
+      <td>${d.item}${d.isNew?' <span class="badge badge-marigold">New</span>':''}</td>
+      <td style="font-size:12px;color:var(--ink-soft);">${d.reason}</td>
+      <td>${d.status==='resolved'
+          ? `<span class="badge badge-good">Resolved</span><br/><span style="font-size:11px;color:var(--ink-soft);">${d.resolution}</span>`
+          : `<select class="admin-select" id="resSel-${d.id}">
+               <option value="No fault found">No fault found</option>
+               <option value="Partial deposit refund">Partial refund</option>
+               <option value="Full refund">Full refund</option>
+             </select><button class="btn btn-primary btn-sm" onclick="resolveDispute('${d.id}')">Resolve</button>`}
+      </td>
+    </tr>`).join('');
+  return `<div class="admin-head"><h2>Disputes</h2>${tabs}</div>
+  <table class="admin-table">
+    <tr><th>Dispute</th><th>Item</th><th>Reason</th><th>Resolution</th></tr>
+    ${rows}
+  </table>
+  <p style="font-size:11.5px;color:var(--ink-soft);margin-top:10px;">Reports filed on the student side (via "Report an issue") land here automatically, tagged <strong>New</strong>.</p>`;
+}
+
+/* ---------------- Root render ---------------- */
+function render(){
+  document.getElementById('screen').innerHTML = renderScreen();
+  document.getElementById('stepperWrap').innerHTML = renderStepper();
+  document.getElementById('adminWrap').innerHTML = renderAdmin();
+  if(state.screen==='handoff' && state.handoffStep==='qr'){
+    const el = document.getElementById('qrCountdown');
+    if(el) el.textContent = fmtCountdown(qrSeconds);
+  }
+}
+render();
+</script>
+</body>
+</html>
