@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "CampusXchange",
+    "slug": "campusxchange",
+    "scheme": "campusxchange",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.campusxchange.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "CampusXchange uses your camera to photograph your student ID card for verification.",
+        "NSPhotoLibraryUsageDescription": "CampusXchange needs access to your photos so you can upload your student ID card."
+      }
+    },
+    "android": {
+      "package": "com.campusxchange.app",
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CampusXchange needs access to your photos so you can upload your student ID card.",
+          "cameraPermission": "CampusXchange uses your camera to photograph your student ID card for verification."
+        }
+      ]
+    ],
+    "icon": "./assets/logo.png"
+  }
+}
