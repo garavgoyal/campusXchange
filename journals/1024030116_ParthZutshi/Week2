@@ -1,0 +1,2 @@
+Implemented database-level security using PL/pgSQL triggers to restrict signups to @thapar.edu emails, and designed a 13-table relational schema with foreign keys and enums for listings and chats. 
+Also configured storage buckets with public access for listing images and private, signed-URL-only access for sensitive ID card photos.
