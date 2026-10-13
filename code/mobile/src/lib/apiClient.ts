@@ -29,7 +29,7 @@ export async function apiGet<T>(path: string): Promise<T> {
 
 export async function apiSend<T>(
   path: string,
-  method: 'POST' | 'PATCH',
+  method: 'POST' | 'PATCH' | 'PUT',
   body?: unknown,
 ): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {

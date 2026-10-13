@@ -15,9 +15,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams } from 'expo-router';
 import { OfferCard } from '../../src/components/chat/OfferCard';
+import { DealStatusPill } from '../../src/components/deals/DealStatusPill';
+import { Button } from '../../src/components/ui/Button';
 import { ErrorText } from '../../src/components/ui/ErrorText';
+import { VerifyNotice, canTrade } from '../../src/components/ui/VerifyNotice';
 import {
   acceptOffer,
+  fetchChats,
   fetchThread,
   rejectOffer,
   sendMessage,
@@ -27,18 +31,30 @@ import type { ThreadEntry } from '../../src/features/chat/types';
 import { fetchListing } from '../../src/features/listings/api';
 import type { Listing } from '../../src/features/listings/types';
 import { useProfile } from '../../src/features/profile/hooks';
+import { createDeal, fetchDealForChat } from '../../src/features/transactions/api';
+import type { TransactionStatus } from '../../src/features/transactions/types';
+import { useRealtimeRefresh } from '../../src/lib/realtime';
 import { colors, radius, typography } from '../../src/constants/colors';
 import { formatClock, formatDay } from '../../src/utils/formatTime';
 
-const POLL_MS = 4000;
+/** Realtime (migration 006) delivers updates instantly; this slow poll is only a safety net. */
+const POLL_MS = 15000;
+
+function isoDay(offsetDays = 0) {
+  return new Date(Date.now() + offsetDays * 86_400_000).toISOString().slice(0, 10);
+}
 
 /** Canned openers — they only prefill the box, nothing is sent automatically. */
 const QUICK_REPLIES = ['Is it still available?', 'Can we meet today?', 'Is the bill available?'];
 
 export default function ChatThreadScreen() {
-  const { id, listingId } = useLocalSearchParams<{ id: string; listingId?: string }>();
-  const { session } = useProfile();
+  const { id, listingId: listingIdParam } = useLocalSearchParams<{ id: string; listingId?: string }>();
+  const { session, profile } = useProfile();
   const myId = session?.user.id;
+  const [listingId, setListingId] = useState<string | undefined>(listingIdParam);
+  const [deal, setDeal] = useState<{ id: string; status: TransactionStatus } | null>(null);
+  const [finalising, setFinalising] = useState(false);
+  const [lendForm, setLendForm] = useState({ start: isoDay(0), end: isoDay(7), deposit: '' });
 
   const [entries, setEntries] = useState<ThreadEntry[]>([]);
   const [listing, setListing] = useState<Listing | null>(null);
@@ -58,7 +74,11 @@ export default function ChatThreadScreen() {
   const load = useCallback(async () => {
     if (inFlight.current > 0) return;
     try {
-      const fresh = await fetchThread(id);
+      const [fresh, dealRes] = await Promise.all([
+        fetchThread(id),
+        fetchDealForChat(id).catch(() => ({ transaction: null })),
+      ]);
+      setDeal(dealRes.transaction as { id: string; status: TransactionStatus } | null);
       // Never drop optimistic entries that haven't come back from the server yet.
       setEntries((prev) => {
         const pending = prev.filter((e) => e.kind === 'message' && e.message.id.startsWith('tmp-'));
@@ -78,9 +98,54 @@ export default function ChatThreadScreen() {
     return () => clearInterval(timer);
   }, [load]);
 
+  // Instant updates: a new message or offer row in this chat triggers a re-fetch.
+  useRealtimeRefresh(
+    [
+      { table: 'messages', filter: `chat_id=eq.${id}` },
+      { table: 'offers', filter: `chat_id=eq.${id}` },
+      { table: 'transactions', filter: `chat_id=eq.${id}` },
+    ],
+    load,
+  );
+
+  // Opened from a notification there is no listingId param — look it up.
+  useEffect(() => {
+    if (listingId) return;
+    fetchChats()
+      .then((threads) => setListingId(threads.find((t) => t.id === id)?.listing_id))
+      .catch(() => undefined);
+  }, [id, listingId]);
+
   useEffect(() => {
     if (listingId) fetchListing(listingId).then(setListing).catch(() => setListing(null));
-  }, [listingId]);
+  }, [listingId, deal?.status]);
+
+  const isOwner = !!listing && !!myId && listing.owner_id === myId;
+
+  /** Seller picks this buyer: turns the agreed offer into a deal (transaction). */
+  async function handleFinalise() {
+    setBusy(true);
+    setError(null);
+    try {
+      const created = await createDeal({
+        chat_id: id,
+        ...(listing?.type === 'lend'
+          ? {
+              start_date: lendForm.start,
+              end_date: lendForm.end,
+              deposit_amount: lendForm.deposit ? Number(lendForm.deposit) : 0,
+            }
+          : {}),
+      });
+      setFinalising(false);
+      router.push({ pathname: '/deal/[id]', params: { id: created.id } });
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not finalise the deal');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const agreed = useMemo(() => {
     const hit = entries.find((e) => e.kind === 'offer' && e.offer.status === 'accepted');
@@ -233,10 +298,73 @@ export default function ChatThreadScreen() {
         </Text>
       </View>
 
-      {agreed != null ? (
-        <View style={styles.agreedBar}>
-          <Ionicons name="checkmark-circle" size={15} color={colors.success} />
-          <Text style={styles.agreedText}>Deal agreed at ₹{agreed}</Text>
+      {deal ? (
+        <Pressable
+          style={styles.agreedBar}
+          onPress={() => router.push({ pathname: '/deal/[id]', params: { id: deal.id } })}
+        >
+          <Ionicons name="bag-check" size={15} color={colors.success} />
+          <Text style={[styles.agreedText, styles.flex]}>View deal</Text>
+          <DealStatusPill status={deal.status} />
+          <Ionicons name="chevron-forward" size={16} color={colors.success} />
+        </Pressable>
+      ) : agreed != null ? (
+        <View style={styles.agreedWrap}>
+          <View style={styles.agreedBar}>
+            <Ionicons name="checkmark-circle" size={15} color={colors.success} />
+            <Text style={[styles.agreedText, styles.flex]}>Price agreed at ₹{agreed}</Text>
+            {isOwner && listing?.status === 'live' && !finalising ? (
+              <Button
+                label="Finalise deal"
+                size="sm"
+                loading={busy}
+                onPress={() => (listing.type === 'lend' ? setFinalising(true) : handleFinalise())}
+              />
+            ) : null}
+          </View>
+          {!isOwner && listing?.status === 'live' ? (
+            <Text style={styles.agreedHint}>Waiting for the seller to finalise the deal with you.</Text>
+          ) : null}
+          {finalising ? (
+            <View style={styles.lendForm}>
+              <Text style={styles.lendTitle}>Lend terms</Text>
+              <View style={styles.lendRow}>
+                <View style={styles.flex}>
+                  <Text style={styles.lendLabel}>From (YYYY-MM-DD)</Text>
+                  <TextInput
+                    value={lendForm.start}
+                    onChangeText={(t) => setLendForm((f) => ({ ...f, start: t }))}
+                    style={styles.lendInput}
+                    maxLength={10}
+                  />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.lendLabel}>Return by</Text>
+                  <TextInput
+                    value={lendForm.end}
+                    onChangeText={(t) => setLendForm((f) => ({ ...f, end: t }))}
+                    style={styles.lendInput}
+                    maxLength={10}
+                  />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.lendLabel}>Deposit ₹</Text>
+                  <TextInput
+                    value={lendForm.deposit}
+                    onChangeText={(t) => setLendForm((f) => ({ ...f, deposit: t.replace(/[^0-9]/g, '') }))}
+                    keyboardType="number-pad"
+                    placeholder="0"
+                    placeholderTextColor={colors.textFaint}
+                    style={styles.lendInput}
+                  />
+                </View>
+              </View>
+              <View style={styles.lendRow}>
+                <Button label="Back" variant="outline" size="sm" onPress={() => setFinalising(false)} style={styles.flex} />
+                <Button label="Confirm deal" size="sm" loading={busy} onPress={handleFinalise} style={styles.flex} />
+              </View>
+            </View>
+          ) : null}
         </View>
       ) : null}
 
@@ -316,6 +444,7 @@ export default function ChatThreadScreen() {
         {/* composer */}
         <View style={styles.composerWrap}>
           <ErrorText>{error}</ErrorText>
+          {profile && !canTrade(profile) ? <VerifyNotice profile={profile} /> : null}
 
           {!offering && agreed == null ? (
             <ScrollView
@@ -444,6 +573,30 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   agreedText: { color: colors.success, fontSize: 13, fontWeight: '700' },
+  agreedWrap: { marginBottom: 8 },
+  agreedHint: { marginHorizontal: 14, marginTop: -4, fontSize: 11, color: colors.textMuted },
+  lendForm: {
+    marginHorizontal: 14,
+    padding: 12,
+    gap: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+  },
+  lendTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
+  lendRow: { flexDirection: 'row', gap: 8 },
+  lendLabel: { fontSize: 10, color: colors.textMuted, marginBottom: 4 },
+  lendInput: {
+    height: 38,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    fontSize: 13,
+    color: colors.text,
+    backgroundColor: colors.background,
+  },
 
   loader: { marginTop: 40 },
   thread: { paddingHorizontal: 14, paddingBottom: 12 },

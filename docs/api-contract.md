@@ -208,3 +208,104 @@ Rules enforced server-side:
 
 Requires `offers.sender_id`, added by `supabase/migrations/002_offers_sender.sql`.
 The app merges messages and offers into a single timeline ordered by timestamp.
+
+---
+
+# Verified-student gate
+
+Every **action** route now requires `users.id_verified = 'verified'` (or `role = 'admin'`),
+enforced by `VerifiedStudentGuard`. Unverified callers get **403** with a message
+telling them to wait for / redo ID verification.
+
+| Gated (verified only) | Open to any signed-in student |
+|---|---|
+| `POST /listings`, `POST /listings/images` | `GET /listings/mine`, `DELETE /listings/:id` |
+| `POST /chats`, `POST /chats/:id/messages`, `POST /chats/:id/offers`, offer accept/reject | `GET /chats`, `GET` messages / offers |
+| every `POST /transactions…` route | `GET /transactions…` |
+| | `/profile/*`, `/notifications/*` |
+
+`GET /listings/:id` now also returns a **non-live** listing to its owner and to anyone
+who already has a chat on it (so the chat and deal screens keep working after the item
+is reserved). Everyone else still gets 404.
+
+`POST /chats` refuses to open a *new* thread on a listing that is not `live`.
+Offers can only be made or accepted while the listing is `live`.
+`DELETE /listings/:id` refuses while the listing is `reserved` (cancel the deal first).
+
+---
+
+# Deals (transactions) — all routes require auth
+
+Payments are **simulated**: `escrow_holds` records holds, releases and refunds, but no
+money moves. Needs migrations `004`, `005` and the private `condition-photos` bucket.
+
+```
+pending_payment ─pay─▶ escrow_held ─show QR─▶ qr_issued ─scan─▶ completed            (sell / exchange)
+                                                       └─scan─▶ in_use ─return scan─▶ completed   (lend)
+active ─dispute─▶ disputed ─admin─▶ completed | refunded
+pending_payment / escrow_held / qr_issued ─cancel─▶ cancelled | refunded
+```
+
+The person **receiving** the item scans the QR shown by the person **handing it over**:
+at handoff the buyer scans the seller's QR (this releases payment); at a lend return the
+lender scans the borrower's QR.
+
+| Route | Who | Does |
+|---|---|---|
+| `GET /transactions` | party | Your deals, newest first, with `my_role` and listing summary |
+| `GET /transactions/by-chat/:chatId` | chat participant | `{ transaction: { id, status } \| null }` — latest deal from that chat |
+| `GET /transactions/:id` | buyer / seller | Full deal: listing, names, escrow, lend terms, condition photos (signed URLs, 30 min), dispute, `stage`, `i_show_qr`, `i_scan_qr` |
+| `POST /transactions` | seller (chat owner) | `{ chat_id, start_date?, end_date?, deposit_amount? }` — needs an **accepted offer** in that chat and a `live` listing. Lend needs both dates. Creates `pending_payment`, listing → `reserved`. One active deal per listing (unique index). |
+| `POST /transactions/:id/pay` | buyer | Holds `agreed_price + deposit` in escrow → `escrow_held` |
+| `POST /transactions/:id/qr` | giver | Fresh 8-char single-use code, valid **10 min**; older unused codes are expired. Returns `{ code, purpose, expires_at, payload }` where `payload = "CX:<txId>:<code>"` is what the QR encodes. |
+| `POST /transactions/:id/photos` | buyer / seller | multipart: `file` (image ≤ 8 MB) + `stage` (`handoff` \| `return`). Stored privately at `condition-photos/<txId>/<stage>/…` |
+| `POST /transactions/:id/scan` | receiver | `{ token }` — the scanned payload or the typed code. Requires **≥ 1 condition photo** for the current stage. Token must belong to this deal, match the stage, be unused and unexpired. |
+| `POST /transactions/:id/cancel` | buyer / seller | Before handoff only. Refunds escrow if paid; listing back to `live`. |
+| `POST /transactions/:id/dispute` | buyer / seller | `{ reason }` (10–1000 chars). Allowed in `escrow_held`, `qr_issued`, `in_use`. Freezes the deal (→ `disputed`), notifies the other party and all admins. One dispute per deal. |
+
+Settlement on a successful scan:
+
+| Type | Handoff scan | Return scan |
+|---|---|---|
+| sell / exchange | → `completed`; escrow released to seller; listing → `completed` | — |
+| lend | → `in_use`; escrow stays held | → `completed`; rent to lender, deposit back to borrower; listing → `live` again |
+
+# Admin — disputes (`AdminGuard`)
+
+| Route | Does |
+|---|---|
+| `GET /admin/disputes` | Open + under-review disputes, each with the full deal and its before/after photos |
+| `POST /admin/disputes/:id/review` | `{ note }` — status → `under_review`, both parties notified ("admin needs more information") |
+| `POST /admin/disputes/:id/resolve` | `{ outcome: "release" \| "refund", resolution, penalty_amount?, penalty_party?: "buyer" \| "seller" }` |
+
+`release` → all escrow to the seller, deal `completed`. `refund` → all escrow to the
+buyer, deal `refunded`; listing back to `live` if the item never changed hands, else
+`removed`. A penalty is added to that user's `users.penalty_total`.
+
+---
+
+# Notifications — all routes require auth
+
+| Route | Does |
+|---|---|
+| `GET /notifications` | Latest 50 for the caller (also creates "borrowed item due" reminders on the fly) |
+| `GET /notifications/unread-count` | `{ unread }` |
+| `POST /notifications/:id/read` | Mark one read |
+| `POST /notifications/read-all` | Mark all read |
+| `GET /notifications/subscriptions` | `{ categories: [...] }` — category alerts |
+| `PUT /notifications/subscriptions` | `{ categories: [...] }` — replaces the set (max 20) |
+
+Created automatically for: listing approved/rejected, ID verified/rejected, new message
+(collapsed per chat while unread), new offer, offer accepted/declined, deal created,
+payment held, handoff complete, item returned, deal cancelled, lend due/overdue,
+dispute opened/updated/resolved, and **category alerts** when a listing goes live in a
+subscribed category.
+
+Each notification's `payload` is `{ title, body, listing_id?, chat_id?, transaction_id?, dispute_id? }`.
+
+# Realtime
+
+After migration `006`, the app subscribes to row changes on `messages`, `offers`,
+`transactions` and `notifications` (Supabase Realtime). Events are only a signal — the
+app re-fetches through this API. RLS read policies limit each user to their own chats,
+deals and inbox. Chat keeps a 15 s fallback poll in case realtime isn't connected.

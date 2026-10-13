@@ -120,6 +120,11 @@ export default function MyListingsScreen() {
           <View style={styles.head}>
             <Text style={styles.screenTitle}>My listings</Text>
             <Text style={styles.screenSub}>Everything you&apos;ve posted, and its review status</Text>
+            <Pressable style={styles.dealsLink} onPress={() => router.push('/deals')}>
+              <Ionicons name="bag-check" size={16} color={colors.primary} />
+              <Text style={styles.dealsLinkText}>My deals — payments, handoffs &amp; returns</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+            </Pressable>
             <ErrorText>{error}</ErrorText>
           </View>
         }
@@ -185,6 +190,16 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center' },
   content: { paddingHorizontal: 16, paddingBottom: 24 },
   head: { paddingTop: 4, paddingBottom: 16 },
+  dealsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: radius.card,
+    backgroundColor: colors.primaryTint,
+  },
+  dealsLinkText: { flex: 1, color: colors.primary, fontSize: 13, fontWeight: '700' },
   screenTitle: { fontSize: 24, fontWeight: '800', color: colors.text },
   screenSub: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
   sep: { height: 10 },

@@ -22,14 +22,22 @@ import {
   rejectListing,
 } from '../../src/features/admin/api';
 import type { IdVerificationItem, ModerationItem } from '../../src/features/admin/types';
+import { DisputeReviewCard } from '../../src/components/deals/DisputeReviewCard';
+import {
+  fetchOpenDisputes,
+  requestEvidence,
+  resolveDispute,
+} from '../../src/features/transactions/api';
+import type { AdminDispute } from '../../src/features/transactions/types';
 import { colors } from '../../src/constants/colors';
 
-type Tab = 'listings' | 'ids';
+type Tab = 'listings' | 'ids' | 'disputes';
 
 export default function AdminScreen() {
   const [tab, setTab] = useState<Tab>('listings');
   const [listings, setListings] = useState<ModerationItem[]>([]);
   const [ids, setIds] = useState<IdVerificationItem[]>([]);
+  const [disputes, setDisputes] = useState<AdminDispute[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,12 +45,14 @@ export default function AdminScreen() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [queue, verifications] = await Promise.all([
+      const [queue, verifications, open] = await Promise.all([
         fetchPendingListings(),
         fetchPendingIdVerifications(),
+        fetchOpenDisputes(),
       ]);
       setListings(queue);
       setIds(verifications);
+      setDisputes(open);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the review queue');
     } finally {
@@ -83,6 +93,35 @@ export default function AdminScreen() {
     }
   }
 
+  async function askEvidence(disputeId: string, note: string) {
+    setBusyId(disputeId);
+    setError(null);
+    try {
+      await requestEvidence(disputeId, note);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not send that request');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function decideDispute(
+    disputeId: string,
+    input: Parameters<typeof resolveDispute>[1],
+  ) {
+    setBusyId(disputeId);
+    setError(null);
+    try {
+      await resolveDispute(disputeId, input);
+      setDisputes((prev) => prev.filter((d) => d.id !== disputeId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not resolve that dispute');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -103,6 +142,14 @@ export default function AdminScreen() {
           >
             <Text style={[styles.tabText, tab === 'ids' && styles.tabTextActive]}>
               ID cards ({ids.length})
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setTab('disputes')}
+            style={[styles.tab, tab === 'disputes' && styles.tabActive]}
+          >
+            <Text style={[styles.tabText, tab === 'disputes' && styles.tabTextActive]}>
+              Disputes ({disputes.length})
             </Text>
           </Pressable>
         </View>
@@ -156,6 +203,24 @@ export default function AdminScreen() {
                   </View>
                 </View>
               </View>
+            ))
+          )
+        ) : tab === 'disputes' ? (
+          disputes.length === 0 ? (
+            <EmptyState
+              icon="checkmark-done-outline"
+              title="No open disputes"
+              message="Reported deals appear here with their condition photos."
+            />
+          ) : (
+            disputes.map((item) => (
+              <DisputeReviewCard
+                key={item.id}
+                item={item}
+                busy={busyId === item.id}
+                onAskEvidence={(note) => askEvidence(item.id, note)}
+                onResolve={(input) => decideDispute(item.id, input)}
+              />
             ))
           )
         ) : ids.length === 0 ? (

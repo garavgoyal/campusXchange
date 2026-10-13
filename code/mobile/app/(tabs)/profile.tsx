@@ -237,6 +237,20 @@ export default function ProfileScreen() {
           />
           <View style={styles.divider} />
           <MenuRow
+            icon="bag-check"
+            title="My deals"
+            subtitle="Payments, QR handoffs, returns and disputes"
+            onPress={() => router.push('/deals')}
+          />
+          <View style={styles.divider} />
+          <MenuRow
+            icon="notifications"
+            title="Notifications & alerts"
+            subtitle="Updates and new-item alerts by category"
+            onPress={() => router.push('/notifications')}
+          />
+          <View style={styles.divider} />
+          <MenuRow
             icon="location"
             title="Campus safe zones"
             subtitle="Recommended daylight meeting points"

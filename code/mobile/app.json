@@ -16,7 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.campusxchange.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "CampusXchange uses your camera to photograph your student ID card for verification.",
+        "NSCameraUsageDescription": "CampusXchange uses your camera to photograph your student ID, take item condition photos at handoff, and scan deal QR codes.",
         "NSPhotoLibraryUsageDescription": "CampusXchange needs access to your photos so you can upload your student ID card."
       }
     },
@@ -38,7 +38,14 @@
         "expo-image-picker",
         {
           "photosPermission": "CampusXchange needs access to your photos so you can upload your student ID card.",
-          "cameraPermission": "CampusXchange uses your camera to photograph your student ID card for verification."
+          "cameraPermission": "CampusXchange uses your camera to photograph your student ID, take item condition photos at handoff, and scan deal QR codes."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "CampusXchange uses your camera to photograph your student ID, take item condition photos at handoff, and scan deal QR codes.",
+          "recordAudioAndroid": false
         }
       ]
     ],
