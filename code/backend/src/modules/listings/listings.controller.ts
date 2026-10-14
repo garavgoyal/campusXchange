@@ -18,6 +18,7 @@ import {
   SupabaseAuthGuard,
   type AuthedUser,
 } from '../../common/guards/supabase-auth.guard.js';
+import { VerifiedStudentGuard } from '../../common/guards/verified-student.guard.js';
 import { CreateListingDto } from './dto/create-listing.dto.js';
 import { ListingsService } from './listings.service.js';
 
@@ -46,7 +47,7 @@ export class ListingsController {
 
   /** Upload one photo, get back a public URL to include in the create call. */
   @Post('images')
-  @UseGuards(SupabaseAuthGuard)
+  @UseGuards(VerifiedStudentGuard)
   @UseInterceptors(FileInterceptor('file'))
   async uploadImage(
     @UploadedFile() file: Express.Multer.File,
@@ -59,11 +60,11 @@ export class ListingsController {
   @Get(':id')
   @UseGuards(OptionalAuthGuard)
   async findOne(@Param('id') id: string, @Req() req: { user?: AuthedUser }) {
-    return this.listingsService.findOne(id, !!req.user);
+    return this.listingsService.findOne(id, req.user?.id ?? null);
   }
 
   @Post()
-  @UseGuards(SupabaseAuthGuard)
+  @UseGuards(VerifiedStudentGuard)
   async create(@Body() dto: CreateListingDto, @CurrentUser() user: AuthedUser) {
     return this.listingsService.create(user.id, dto);
   }

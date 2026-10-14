@@ -1,9 +1,12 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { getSupabaseAdmin } from '../../database/supabase.client.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
+
+  constructor(private readonly notifications: NotificationsService) {}
 
   /** Listings awaiting human review, newest first, with the listing joined in. */
   async pendingListings() {
@@ -54,11 +57,19 @@ export class AdminService {
       .from('listings')
       .update({ status: 'live' })
       .eq('id', listingId)
-      .select('id, status')
+      .select('id, status, owner_id, title, category, type')
       .single();
 
     if (error || !data) throw new NotFoundException('Listing not found');
-    return data;
+
+    await this.notifications.notify(data.owner_id, 'listing_approved', {
+      title: 'Your listing is live',
+      body: `"${data.title}" passed review and is now on the campus feed.`,
+      listing_id: data.id,
+    });
+    await this.notifications.notifyCategorySubscribers(data);
+
+    return { id: data.id, status: data.status };
   }
 
   async rejectListing(listingId: string, adminId: string, reason: string) {
@@ -81,11 +92,18 @@ export class AdminService {
       .from('listings')
       .update({ status: 'removed' })
       .eq('id', listingId)
-      .select('id, status')
+      .select('id, status, owner_id, title')
       .single();
 
     if (error || !data) throw new NotFoundException('Listing not found');
-    return data;
+
+    await this.notifications.notify(data.owner_id, 'listing_rejected', {
+      title: 'Listing not approved',
+      body: `"${data.title}" was not published. Reason: ${reason}`,
+      listing_id: data.id,
+    });
+
+    return { id: data.id, status: data.status };
   }
 
   /** Students whose uploaded ID card is still awaiting review. */
@@ -128,6 +146,15 @@ export class AdminService {
       .single();
 
     if (error || !data) throw new NotFoundException('User not found');
+
+    await this.notifications.notify(
+      userId,
+      decision === 'verified' ? 'id_verified' : 'id_rejected',
+      decision === 'verified'
+        ? { title: 'You are verified', body: 'Your student ID was approved. You can now list items, chat and trade.' }
+        : { title: 'ID card not accepted', body: 'Your ID photo could not be verified. Upload a clearer photo from your profile.' },
+    );
+
     return data;
   }
 }

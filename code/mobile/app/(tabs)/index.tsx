@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -23,9 +24,12 @@ import { colors, radius } from '../../src/constants/colors';
 import { useListings } from '../../src/features/listings/hooks';
 import type { ListingType } from '../../src/features/listings/types';
 import { useProfile } from '../../src/features/profile/hooks';
+import { useUnreadCount } from '../../src/features/notifications/hooks';
+import { VerifyNotice } from '../../src/components/ui/VerifyNotice';
 
 export default function FeedScreen() {
-  const { isSignedIn } = useProfile();
+  const { isSignedIn, profile } = useProfile();
+  const unread = useUnreadCount();
   const [mode, setMode] = useState<ListingType>('sell');
   const [category, setCategory] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -44,6 +48,21 @@ export default function FeedScreen() {
           <Text style={styles.brand}>CampusXchange</Text>
           <Text style={styles.brandSub}>Thapar Institute</Text>
         </View>
+        {isSignedIn ? (
+          <Pressable
+            onPress={() => router.push('/notifications')}
+            hitSlop={8}
+            style={styles.bell}
+            accessibilityLabel={unread ? `${unread} unread notifications` : 'Notifications'}
+          >
+            <Ionicons name="notifications-outline" size={23} color={colors.text} />
+            {unread > 0 ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+        ) : null}
       </View>
 
       <FlatList
@@ -82,6 +101,8 @@ export default function FeedScreen() {
               onChange={setCategory}
               allLabel="All items"
             />
+
+            <VerifyNotice profile={profile} />
 
             {!isSignedIn ? (
               <Banner
@@ -139,6 +160,20 @@ const styles = StyleSheet.create({
   appBarText: { flex: 1 },
   brand: { fontSize: 17, fontWeight: '800', color: colors.text },
   brandSub: { fontSize: 11, color: colors.textMuted },
+  bell: { padding: 4 },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: colors.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   content: { paddingHorizontal: 16, paddingBottom: 24 },
   header: { gap: 14, paddingBottom: 16 },
   search: {

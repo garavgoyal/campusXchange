@@ -1,8 +1,11 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { getSupabaseAdmin } from '../../database/supabase.client.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 @Injectable()
 export class ChatService {
+  constructor(private readonly notifications: NotificationsService) {}
+
   /**
    * One thread per (listing, buyer) — the schema's unique constraint. Calling
    * this twice returns the same thread instead of failing.
@@ -29,6 +32,11 @@ export class ChatService {
       .maybeSingle();
 
     if (existing) return existing;
+
+    // New conversations only on items that are actually available.
+    if (listing.status !== 'live') {
+      throw new BadRequestException('This item is no longer available');
+    }
 
     const { data, error } = await supabase
       .from('chats')
@@ -108,7 +116,7 @@ export class ChatService {
   }
 
   async sendMessage(chatId: string, userId: string, content: string) {
-    await this.assertParticipant(chatId, userId);
+    const chat = await this.assertParticipant(chatId, userId);
 
     const { data, error } = await getSupabaseAdmin()
       .from('messages')
@@ -117,6 +125,15 @@ export class ChatService {
       .single();
 
     if (error || !data) throw new BadRequestException(error?.message ?? 'Could not send message');
+
+    const recipient = chat.initiator_id === userId ? chat.owner_id : chat.initiator_id;
+    const { data: listing } = await getSupabaseAdmin()
+      .from('listings')
+      .select('title')
+      .eq('id', chat.listing_id)
+      .maybeSingle();
+    await this.notifications.notifyNewMessage(recipient, chatId, listing?.title ?? 'Chat', content);
+
     return data;
   }
 }

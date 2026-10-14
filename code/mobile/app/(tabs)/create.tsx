@@ -11,6 +11,7 @@ import { ErrorText } from '../../src/components/ui/ErrorText';
 import { Field } from '../../src/components/ui/Field';
 import { Segmented } from '../../src/components/ui/Segmented';
 import { SignInPrompt } from '../../src/components/ui/SignInPrompt';
+import { VerifyNotice, canTrade } from '../../src/components/ui/VerifyNotice';
 import {
   CATEGORIES,
   CONDITIONS,
@@ -23,7 +24,8 @@ import type { ListingType, RentUnit } from '../../src/features/listings/types';
 import { useProfile } from '../../src/features/profile/hooks';
 
 export default function CreateScreen() {
-  const { isSignedIn, loading: profileLoading } = useProfile();
+  const { isSignedIn, profile, loading: profileLoading } = useProfile();
+  const verified = canTrade(profile);
 
   const [type, setType] = useState<ListingType>('sell');
   const [photos, setPhotos] = useState<string[]>([]);
@@ -121,6 +123,8 @@ export default function CreateScreen() {
         <Text style={styles.screenSub}>
           List an item to sell, lend or barter with verified hostel mates.
         </Text>
+
+        <VerifyNotice profile={profile} />
 
         <Segmented options={LISTING_MODES} value={type} onChange={setType} />
 
@@ -223,7 +227,12 @@ export default function CreateScreen() {
         <ErrorText>{error}</ErrorText>
 
         <View style={styles.submit}>
-          <Button label="Post listing to campus feed" loading={loading} onPress={handleSubmit} />
+          <Button
+            label={verified ? 'Post listing to campus feed' : 'Verify your ID to post'}
+            loading={loading}
+            disabled={!verified}
+            onPress={handleSubmit}
+          />
         </View>
       </KeyboardAwareScrollView>
     </SafeAreaView>

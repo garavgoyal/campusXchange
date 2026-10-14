@@ -47,15 +47,33 @@ export class ListingsService {
     return this.hideLocationForGuests((data ?? []) as ListingRow[], isSignedIn);
   }
 
-  async findOne(id: string, isSignedIn: boolean) {
-    const { data, error } = await getSupabaseAdmin()
+  /**
+   * Anyone may open a live listing. Once it is reserved or sold it leaves the
+   * feed, but the owner and anyone already chatting about it can still open it
+   * (the chat and deal screens show it as context).
+   */
+  async findOne(id: string, viewerId: string | null) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
       .from('listings')
       .select(LISTING_COLUMNS)
       .eq('id', id)
       .single();
 
     if (error || !data) throw new NotFoundException('Listing not found');
-    if (data.status !== 'live') throw new NotFoundException('Listing not available');
+    if (data.status !== 'live') {
+      let allowed = !!viewerId && data.owner_id === viewerId;
+      if (!allowed && viewerId) {
+        const { count } = await supabase
+          .from('chats')
+          .select('id', { count: 'exact', head: true })
+          .eq('listing_id', id)
+          .eq('initiator_id', viewerId);
+        allowed = !!count;
+      }
+      if (!allowed) throw new NotFoundException('Listing not available');
+    }
+    const isSignedIn = !!viewerId;
 
     return this.hideLocationForGuests([data as ListingRow], isSignedIn)[0];
   }
@@ -84,13 +102,16 @@ export class ListingsService {
 
     const { data: listing, error } = await supabase
       .from('listings')
-      .select('id, owner_id')
+      .select('id, owner_id, status')
       .eq('id', listingId)
       .single();
 
     if (error || !listing) throw new NotFoundException('Listing not found');
     if (listing.owner_id !== userId) {
       throw new ForbiddenException('You can only delete your own listings');
+    }
+    if (listing.status === 'reserved') {
+      throw new BadRequestException('This item has a deal in progress — cancel the deal first');
     }
 
     const { count } = await supabase

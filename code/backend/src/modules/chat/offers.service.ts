@@ -5,15 +5,35 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { getSupabaseAdmin } from '../../database/supabase.client.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 const OFFER_COLUMNS = 'id, chat_id, sender_id, offered_price, status, created_at';
 
 /**
- * Price negotiation inside a chat thread. Deliberately stops at "both sides
- * agreed on a number" — no transaction row, no escrow, no payment.
+ * Price negotiation inside a chat thread. Ends at "both sides agreed on a
+ * number"; the seller then turns that agreement into a deal (POST /transactions).
  */
 @Injectable()
 export class OffersService {
+  constructor(private readonly notifications: NotificationsService) {}
+
+  private other(chat: { initiator_id: string; owner_id: string }, userId: string) {
+    return chat.initiator_id === userId ? chat.owner_id : chat.initiator_id;
+  }
+
+  /** Negotiating only makes sense while the item is still on the feed. */
+  private async assertListingLive(listingId: string) {
+    const { data } = await getSupabaseAdmin()
+      .from('listings')
+      .select('status, title')
+      .eq('id', listingId)
+      .maybeSingle();
+    if (!data || data.status !== 'live') {
+      throw new BadRequestException('This item is no longer available for negotiation');
+    }
+    return data.title as string;
+  }
+
   private async loadChat(chatId: string, userId: string) {
     const { data, error } = await getSupabaseAdmin()
       .from('chats')
@@ -43,7 +63,8 @@ export class OffersService {
 
   /** Either party may propose a price — that's what makes it a negotiation. */
   async createOffer(chatId: string, userId: string, price: number) {
-    await this.loadChat(chatId, userId);
+    const chat = await this.loadChat(chatId, userId);
+    const title = await this.assertListingLive(chat.listing_id);
 
     const { data: agreed } = await getSupabaseAdmin()
       .from('offers')
@@ -63,6 +84,13 @@ export class OffersService {
       .single();
 
     if (error || !data) throw new BadRequestException(error?.message ?? 'Could not send offer');
+
+    await this.notifications.notify(this.other(chat, userId), 'new_offer', {
+      title: `New offer · ${title}`,
+      body: `₹${price} proposed. Accept, counter or decline in the chat.`,
+      chat_id: chatId,
+      listing_id: chat.listing_id,
+    });
     return data;
   }
 
@@ -80,7 +108,7 @@ export class OffersService {
       .single();
 
     if (error || !offer) throw new NotFoundException('Offer not found');
-    await this.loadChat(offer.chat_id, userId);
+    const chat = await this.loadChat(offer.chat_id, userId);
 
     if (offer.sender_id === userId) {
       throw new BadRequestException('You cannot respond to your own offer');
@@ -88,6 +116,7 @@ export class OffersService {
     if (offer.status !== 'pending') {
       throw new BadRequestException(`That offer was already ${offer.status}`);
     }
+    const title = decision === 'accepted' ? await this.assertListingLive(chat.listing_id) : null;
 
     const { data: updated, error: updateError } = await supabase
       .from('offers')
@@ -108,6 +137,20 @@ export class OffersService {
         .eq('chat_id', offer.chat_id)
         .eq('status', 'pending')
         .neq('id', offerId);
+    }
+
+    if (offer.sender_id) {
+      await this.notifications.notify(
+        offer.sender_id,
+        decision === 'accepted' ? 'offer_accepted' : 'offer_rejected',
+        decision === 'accepted'
+          ? {
+              title: 'Offer accepted',
+              body: `₹${offer.offered_price} agreed${title ? ` for "${title}"` : ''}. The seller can now finalise the deal.`,
+              chat_id: offer.chat_id,
+            }
+          : { title: 'Offer declined', body: `Your ₹${offer.offered_price} offer was declined.`, chat_id: offer.chat_id },
+      );
     }
 
     return updated;

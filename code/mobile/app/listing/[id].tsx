@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Button } from '../../src/components/ui/Button';
 import { ErrorText } from '../../src/components/ui/ErrorText';
+import { VerifyNotice, canTrade } from '../../src/components/ui/VerifyNotice';
 import { startChat } from '../../src/features/chat/api';
 import { deleteListing, fetchListing } from '../../src/features/listings/api';
 import type { Listing } from '../../src/features/listings/types';
@@ -172,6 +173,10 @@ export default function ListingDetailScreen() {
               style={styles.deleteBtn}
             />
           </View>
+        ) : listing.status !== 'live' ? (
+          <Text style={styles.ownNotice}>This item is reserved in a deal and no longer available.</Text>
+        ) : session && !canTrade(profile) ? (
+          <VerifyNotice profile={profile} />
         ) : (
           <Button label={CTA[listing.type]} loading={starting} onPress={handleContact} />
         )}
