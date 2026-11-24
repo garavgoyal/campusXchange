@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { colors, radius } from '../../constants/colors';
+import { colors, radius, fonts } from '../../constants/colors';
 import { uploadConditionPhoto } from '../../features/transactions/api';
 import type { ConditionPhoto, PhotoStage } from '../../features/transactions/types';
 
@@ -82,7 +82,7 @@ export function ConditionPhotos({ dealId, stage, photos, canAdd, onAdded, onErro
 
 const styles = StyleSheet.create({
   wrap: { gap: 8 },
-  label: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: colors.textMuted },
+  label: { fontSize: 11, fontFamily: fonts.bold, letterSpacing: 0.8, color: colors.textMuted },
   row: { gap: 8, alignItems: 'center' },
   thumb: { width: 76, height: 76, borderRadius: 12, backgroundColor: colors.surfaceSunk },
   empty: { alignItems: 'center', justifyContent: 'center' },
@@ -98,6 +98,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
   },
-  addText: { fontSize: 11, color: colors.primary, fontWeight: '600' },
-  none: { fontSize: 13, color: colors.textFaint, borderRadius: radius.card },
+  addText: { fontSize: 11, color: colors.primary, fontFamily: fonts.semibold },
+  none: { fontSize: 13, fontFamily: fonts.regular, color: colors.textFaint, borderRadius: radius.card },
 });

@@ -1,14 +1,6 @@
 import { File } from 'expo-file-system';
-import { API_URL, apiGet, apiSend, authHeaders } from '../../lib/apiClient';
-import type {
-  AdminDispute,
-  ConditionPhoto,
-  CreateDealInput,
-  Deal,
-  DealSummary,
-  PhotoStage,
-  QrTicket,
-} from './types';
+import { API_URL, apiGet, apiSend, authHeaders, errorMessage } from '../../lib/apiClient';
+import type { AdminDispute, ConditionPhoto, CreateDealInput, Deal, DealSummary, PhotoStage, QrTicket, PenaltyTier, PenaltyTierKey } from './types';
 
 export async function fetchMyDeals(): Promise<DealSummary[]> {
   return apiGet<DealSummary[]>('/transactions');
@@ -68,16 +60,7 @@ export async function uploadConditionPhoto(
     headers: await authHeaders(),
     body: form,
   });
-  if (!res.ok) {
-    let message = `Upload failed (${res.status})`;
-    try {
-      const body = (await res.json()) as { message?: string | string[] };
-      if (body.message) message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
-    } catch {
-      /* keep default */
-    }
-    throw new Error(message);
-  }
+  if (!res.ok) throw new Error(await errorMessage(res));
   return (await res.json()) as ConditionPhoto;
 }
 
@@ -96,9 +79,22 @@ export async function resolveDispute(
   input: {
     outcome: 'release' | 'refund';
     resolution: string;
-    penalty_amount?: number;
+    penalty_tier?: PenaltyTierKey;
     penalty_party?: 'buyer' | 'seller';
   },
 ) {
   return apiSend(`/admin/disputes/${disputeId}/resolve`, 'POST', input);
+}
+
+let tiers: Promise<PenaltyTier[]> | null = null;
+
+/** The fixed penalty tiers (admin only). Fetched once. */
+export function fetchPenaltyTiers(): Promise<PenaltyTier[]> {
+  if (!tiers) {
+    tiers = apiGet<PenaltyTier[]>('/admin/disputes/penalty-tiers').catch((e) => {
+      tiers = null;
+      throw e;
+    });
+  }
+  return tiers;
 }

@@ -4,20 +4,21 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { DealStatusPill } from '../src/components/deals/DealStatusPill';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorText } from '../src/components/ui/ErrorText';
-import { colors, radius } from '../src/constants/colors';
+import { colors, radius, fonts, shadow } from '../src/constants/colors';
 import { fetchMyDeals } from '../src/features/transactions/api';
 import { ACTIVE_STATUSES, type DealSummary } from '../src/features/transactions/types';
+import { BackButton } from '../src/components/ui/BackButton';
+import { Appear, PressScale } from '../src/components/ui/motion';
+import { Screen } from '../src/components/ui/Screen';
 
 /** Every deal you are buying, selling, borrowing or lending — active ones first. */
 export default function DealsScreen() {
@@ -46,11 +47,9 @@ export default function DealsScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <Screen style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
-        </Pressable>
+        <BackButton />
         <Text style={styles.headerTitle}>My deals</Text>
       </View>
 
@@ -71,14 +70,16 @@ export default function DealsScreen() {
             />
           )
         }
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
           const buying = item.my_role === 'buyer';
           const verb =
             item.type === 'lend' ? (buying ? 'Borrowing' : 'Lending')
             : item.type === 'exchange' ? 'Exchange'
             : buying ? 'Buying' : 'Selling';
           return (
-            <Pressable
+            <Appear index={index}>
+            <PressScale
+              scaleTo={0.98}
               style={styles.card}
               onPress={() => router.push({ pathname: '/deal/[id]', params: { id: item.id } })}
             >
@@ -99,18 +100,19 @@ export default function DealsScreen() {
                 <DealStatusPill status={item.status} />
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-            </Pressable>
+            </PressScale>
+            </Appear>
           );
         }}
       />
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingTop: 4, paddingBottom: 10 },
+  headerTitle: { fontSize: 19, fontFamily: fonts.displayBold, color: colors.text, letterSpacing: -0.2 },
   content: { padding: 16, gap: 10, paddingBottom: 40 },
   loader: { marginTop: 48 },
   card: {
@@ -118,14 +120,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 12,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.card,
+    borderColor: colors.glassBorder,
+    borderRadius: radius.card, ...shadow.card,
   },
   thumb: { width: 56, height: 56, borderRadius: 10, backgroundColor: colors.surfaceSunk },
   thumbEmpty: { alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1, gap: 4 },
-  title: { fontSize: 15, fontWeight: '700', color: colors.text },
-  meta: { fontSize: 12, color: colors.textMuted },
+  title: { fontSize: 15, fontFamily: fonts.bold, color: colors.text },
+  meta: { fontSize: 12, fontFamily: fonts.regular, color: colors.textMuted },
 });

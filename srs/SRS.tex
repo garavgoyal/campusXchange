@@ -25,7 +25,7 @@
     linktoc=page
 }
 
-\def\myversion{1.0}
+\def\myversion{2.1}
 \setlist{itemsep=2pt,topsep=4pt}
 \renewcommand{\arraystretch}{1.25}
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
@@ -73,7 +73,7 @@
         Computer Science and Engineering Department\\
         Thapar Institute of Engineering and Technology, Patiala\\
         \vspace{0.8cm}
-        October 2026\\
+        November 2026\\
     \end{bfseries}
 \end{flushright}
 \end{titlepage}
@@ -93,9 +93,13 @@ lab gear, cycles and electronics.
 The document is the agreed reference for what the system must do. It is
 written to be consistent with the project proposal approved on
 19 August 2026, and it records explicitly where the design has since been
-refined (Section~\ref{sec:deviations}). It covers the complete system,
-including the payment, handoff and dispute modules that are designed but
-not yet implemented at the time of writing.
+refined (Section~\ref{sec:deviations}). It covers the complete system as
+built for the pilot. Version 2.0 updates every status to the implemented
+system and adds the test results (Section~\ref{sec:verification}); version
+2.1 adds reporting and takedown (FR-MOD-8 to FR-MOD-10) and writes down rules
+the system already followed (FR-CHT-11, FR-PAY-7, FR-PAY-8, FR-HND-6). The only
+part that is simulated is the payment gateway: escrow holds, releases and
+refunds are recorded, but no real money moves yet.
 
 \section{Document Conventions}
 \begin{itemize}
@@ -107,10 +111,10 @@ not yet implemented at the time of writing.
     (important, but the core workflow still functions without it) or
     \emph{Low} (desirable enhancement).
   \item \textbf{Status} records progress at the time of writing:
-    \emph{Implemented} (built and verified on device), \emph{Partial}
-    (built, but part of the requirement is not yet enforced) or
-    \emph{Planned} (fully designed and modelled; database support exists;
-    implementation scheduled for the next phase).
+    \emph{Implemented} (built, and checked by the automated tests or the
+    manual test cases in \texttt{docs/testing/TEST-CASES.md}), \emph{Partial}
+    (built, but part of the requirement is simulated or not yet measured) or
+    \emph{Planned} (designed, not built in this version).
   \item The words \emph{shall} (mandatory), \emph{should} (recommended)
     and \emph{may} (optional) are used in their usual requirements sense.
   \item Database tables, columns and API routes appear in
@@ -124,7 +128,8 @@ not yet implemented at the time of writing.
   \item \textbf{Developers (the project team)} -- Chapters~3, 4 and 6 give the
     exact behaviour, interfaces and data model to build against.
   \item \textbf{Testers} -- every requirement in Chapters~3 and 5 is written
-    to be verifiable; Chapter~8 lists the acceptance criteria.
+    to be verifiable; Chapter~8 lists the acceptance criteria and the test
+    results, and \texttt{docs/testing/TEST-CASES.md} gives every test case.
   \item \textbf{Pilot administrators / moderators} -- Sections~3.4, 3.9 and
     3.11 describe their responsibilities in the system.
 \end{itemize}
@@ -182,25 +187,18 @@ Guest & A person using the app without signing in; may browse only\\
 Handoff & The physical, on-campus meeting at which an item changes hands\\
 Listing & An item offered for Sell, Lend or Exchange\\
 OTP & One-Time Password, a 6-digit code sent to the student's college email\\
-QR token & A signed, single-use, time-bound code that identifies one transaction at handoff\\
+QR token & A random, single-use code that expires after 10 minutes and identifies one transaction at handoff or return\\
 RLS & Row-Level Security (PostgreSQL feature)\\
 Signed URL & A time-limited link to a private file in object storage\\
 Student & A signed-up user whose ID card is not yet verified\\
 Verified Student & A student whose \texttt{id_verified} is \texttt{verified}\\
 TLC & Time to Listing Clearance: time from listing submission to moderation decision\\
+CI & Continuous Integration: the automated checks GitHub Actions runs on every push\\
+Hostel & One of the 18 Thapar hostels; a student may set theirs to sort the feed by distance\\
 UML & Unified Modeling Language\\
 \bottomrule
 \end{longtable}
 
-\section{References}
-\begin{enumerate}
-  \item CampusXchange Project Proposal, UCS503P, submitted 19 August 2026.
-  \item CampusXchange Mid-Semester Evaluation Report (\texttt{report/main.tex}).
-  \item CampusXchange API Contract (\texttt{docs/api-contract.md}).
-  \item CampusXchange database schema (\texttt{supabase/migrations/}).
-  \item IEEE Std 830-1998, \emph{IEEE Recommended Practice for Software
-    Requirements Specifications}.
-\end{enumerate}
 
 % =====================================================================
 \chapter{Overall Description}
@@ -214,14 +212,19 @@ group-chat trading. It follows a three-tier architecture
     user-facing surface. Students, guests and administrators all use it;
     administrators see an extra \emph{Review} tab.
   \item \textbf{Backend API} -- a stateless NestJS service organised into
-    feature modules (profile, listings, chat, admin) behind a guard layer
-    that authenticates every request.
-  \item \textbf{Data platform} -- Supabase, providing PostgreSQL, the
-    authentication service (email OTP) and object storage (a private
-    \texttt{id-cards} bucket and a public \texttt{listing-images} bucket).
+    feature modules (profile, listings, campus, chat, transactions, disputes,
+    notifications, admin) behind a guard layer that authenticates every
+    request, plus rate limiting and security headers.
+  \item \textbf{Data platform} -- Supabase, providing PostgreSQL with
+    Row-Level Security, the authentication service (email OTP), Realtime
+    (live chat and notifications) and object storage (private
+    \texttt{id-cards} and \texttt{condition-photos} buckets and a public
+    \texttt{listing-images} bucket).
+  \item \textbf{Expo push service} -- delivers phone notifications.
 \end{itemize}
-Authentication traffic goes directly from the app to the identity provider;
-all application data passes through the backend.
+Authentication traffic goes directly from the app to the identity provider,
+and the app subscribes to Realtime for its own chats and notifications;
+all other application data passes through the backend.
 
 \begin{figure}[H]
   \centering
@@ -237,15 +240,19 @@ At a high level the system shall allow users to:
     number and upload a student ID card for verification;
   \item browse and search live listings by type and category, including as a
     guest;
-  \item create, view and delete listings with photographs, condition and a
-    campus meeting point;
+  \item create, view, edit and delete listings with photographs, condition
+    and a campus meeting point;
+  \item sort the feed by distance from their own hostel;
   \item have every new listing reviewed by an administrator before it goes live;
-  \item chat with the other party and negotiate a price through offers;
+  \item chat with the other party and negotiate a price through offers, or
+    an item and a top-up for an exchange;
   \item pay into escrow, receive a QR code, and complete a verified handoff
     with condition photographs;
   \item complete a return leg for lend transactions;
-  \item raise and resolve disputes;
-  \item receive notifications and category-based alerts.
+  \item raise and resolve disputes, with fixed penalty tiers;
+  \item receive in-app and phone notifications, category alerts and
+    exchange matches;
+  \item (administrators) see the evaluation metrics on a dashboard.
 \end{enumerate}
 Figure~\ref{fig:workflow} summarises the end-to-end workflow.
 
@@ -293,6 +300,8 @@ trained student volunteers or staff (2--3 in the pilot).
 \begin{itemize}
   \item \textbf{Client:} Android and iOS smartphones running the Expo
     (React Native, Expo SDK 57) app; during development, run through Expo Go.
+    Phone push notifications need a development build of the app. The admin
+    screens also run in a web browser.
   \item \textbf{Backend:} Node.js (v22) running NestJS; currently run
     locally, to be deployed on a cloud platform for the pilot.
   \item \textbf{Data platform:} Supabase-hosted PostgreSQL, Supabase Auth
@@ -316,15 +325,16 @@ trained student volunteers or staff (2--3 in the pilot).
     auto-rejected or auto-banned.
   \item No OCR, barcode scanning or third-party KYC vendor is used for ID
     verification.
-  \item All handoffs are physical and on campus at pre-seeded meeting
-    points; no shipping or courier integration.
+  \item All handoffs are physical and on campus at meeting points from the
+    campus list (18 hostels and campus spots, taken from the TIET campus
+    map); no shipping or courier integration.
   \item The app must remain usable on budget Android phones and patchy
     networks.
   \item Development is by a four-person student team within one semester,
     using free tiers of hosted services (e.g.\ Supabase's built-in mailer is
     rate-limited, so custom SMTP is required).
-  \item Every push must pass CI (mobile type-check and backend build on
-    GitHub Actions).
+  \item Every push must pass CI on GitHub Actions: type checks, lint, unit
+    tests, end-to-end tests, the backend build and a dependency audit.
 \end{enumerate}
 
 \section{Assumptions and Dependencies}
@@ -335,7 +345,8 @@ trained student volunteers or staff (2--3 in the pilot).
   \item Supabase services (Auth, PostgreSQL, Storage) remain available
     within free-tier limits during the pilot.
   \item A payment gateway with escrow or split-payment support (e.g.\ a
-    sandbox/test mode) is available for the payment phase.
+    sandbox/test mode) will be connected after the pilot; until then
+    payments are simulated.
   \item An SMTP provider is configured so that OTP emails contain the
     6-digit code rather than a magic link.
   \item 2--3 volunteer administrators are available to keep TLC within target.
@@ -350,10 +361,15 @@ approved. They are recorded here so that this SRS remains traceable to it.
 \toprule
 \textbf{Area} & \textbf{Proposal said} & \textbf{This SRS specifies, and why}\\ \midrule\endhead
 Identity verification & Roll number only, entered by hand; ``no ID card image or scan'' & Roll number \emph{and} a photograph of the student ID card, reviewed manually by an admin. Format-checking alone could not prove a roll number belongs to the person using it. Privacy is protected by a private bucket, short-lived signed URLs for admins only, and per-user storage paths (NFR-SEC-4, NFR-PRV-1).\\
-Meeting location & Suggestions pre-seeded with campus landmarks & Implemented as a fixed dropdown of hostel blocks, academic blocks and landmarks, with no GPS, so no location permission is ever needed.\\
+Meeting location & Suggestions pre-seeded with campus landmarks & A searchable list of the 18 hostels and campus spots, taken from the TIET campus map, with no GPS, so no location permission is ever needed. The owner confirms the meeting point again when finalising a deal.\\
+Nearest-first feed & Not mentioned & A student may set their hostel; the feed can then be sorted by straight-line distance from it to each meeting point (FR-BRW-8).\\
 Guest browsing & Not mentioned & Guests may browse the feed; the meeting location is withheld server-side.\\
-Admin interface & Separate web dashboard & An admin-only \emph{Review} tab in the mobile app for the pilot; a web dashboard remains optional (FR-ADM-6).\\
-Real-time chat & Real-time messaging & Chat currently polls every 4 seconds; Socket.io is planned (NFR-PRF-5). The API shape does not change.\\
+Admin interface & Separate web dashboard & An admin-only \emph{Review} tab in the app, with a Dashboard of the evaluation metrics. The same screens run in a web browser, which serves as the web dashboard (FR-ADM-6).\\
+Real-time chat & Real-time messaging & Supabase Realtime instead of a separate Socket.io server, with a slow fallback poll (FR-CHT-10).\\
+Payments & Payment gateway with escrow & Simulated for the pilot: the escrow hold, release and refund are recorded and all rules are enforced, but no money moves. A real gateway only replaces three backend functions.\\
+Exchange offers & Barter between two students & The person asking to swap names and photographs their item; either side can add a top-up and say who pays it.\\
+Reporting and takedown & Trust and safety layer & Students can report a listing or a person; admins can take down a listing that is already live, which cancels and refunds any deal not yet handed over (FR-MOD-8 to FR-MOD-10).\\
+Penalties & Penalties for the party at fault & Three fixed tiers: minor Rs.~50, moderate Rs.~200, severe Rs.~500. Admins choose a tier, not a free amount.\\
 AI moderation flagging & Off-the-shelf moderation API assigns a flag score & Schema column exists (\texttt{ai_flag_score}); not wired for the pilot. Every listing goes to human review, which satisfies the proposal's ``mandatory human review''.\\
 \bottomrule
 \end{longtable}
@@ -401,8 +417,8 @@ FR-BRW-3 & The system shall let users search listings by keyword, case-insensiti
 FR-BRW-4 & The system shall show a listing detail screen with photographs, title, description, category, condition, price or rent terms or wanted items, and meeting location. & High & \impl\\
 FR-BRW-5 & For a request without a valid session, the backend shall replace the meeting location with \texttt{null} and mark it hidden; the app shall prompt the guest to sign in to see it. & High & \impl\\
 FR-BRW-6 & The system shall prompt a guest to sign in when they attempt any action other than browsing (chat, list, offer). & High & \impl\\
-FR-BRW-7 & The system shall return at most 100 listings per feed request; pagination should be added for scale. & Medium & \partl\\
-FR-BRW-8 & The system should allow sorting listings by proximity of the meeting point to the viewer's hostel. & Low & \planned\\
+FR-BRW-7 & The system shall return the feed in pages of 20 listings by default and never more than 50 per request. & Medium & \impl\\
+FR-BRW-8 & The system should allow sorting listings by proximity of the meeting point to the viewer's hostel. & Low & \impl\\
 \end{reqtable}
 
 % ---------------------------------------------------------------
@@ -411,22 +427,22 @@ FR-BRW-8 & The system should allow sorting listings by proximity of the meeting 
 Lend or Exchange. \emph{Priority: High.}
 
 \begin{reqtable}
-FR-LST-1 & The system shall allow a verified student to create a listing with: type (sell / lend / exchange), title (3--120 characters), optional description (up to 2000 characters), category, condition (Like New / Good / Fair) and meeting location. & High & \partl\textsuperscript{a}\\
+FR-LST-1 & The system shall allow a verified student to create a listing with: type (sell / lend / exchange), title (3--120 characters), optional description (up to 2000 characters), category, condition (Like New / Good / Fair) and meeting location. & High & \impl\\
 FR-LST-2 & The system shall require a price for a Sell listing, a rent amount (with unit day or week) for a Lend listing, and at least one wanted-item tag (max 10) for an Exchange listing, and shall reject a listing missing its type-specific field. & High & \impl\\
 FR-LST-3 & The system shall let the user attach up to 6 photographs (images only, max 8 MB each) to a listing, stored in public storage under the owner's folder. & High & \impl\\
-FR-LST-4 & The system shall offer the meeting location as a choice from pre-seeded campus points (Library Foyer, Hostel Blocks A--D, Academic Blocks A--B, Sports Complex, Main Gate, Cafeteria). & Medium & \impl\\
+FR-LST-4 & The system shall offer the meeting location as a choice from the campus list (18 hostels and campus spots such as Library, Main Gate and Sports Complex), and the backend shall refuse any other value. & Medium & \impl\\
 FR-LST-5 & The system shall save every new listing with status \texttt{pending_review} and never publish it directly. & High & \impl\\
 FR-LST-6 & The system shall show a user all of their own listings at every status (pending review, live, reserved, completed, removed). & High & \impl\\
 FR-LST-7 & The system shall allow only the owner of a listing to delete it; any other user shall receive a ``forbidden'' response. & High & \impl\\
-FR-LST-8 & The system should allow the owner to edit a listing; an edited live listing shall return to moderation. & Medium & \planned\\
-FR-LST-9 & The system shall mark a listing \texttt{reserved} once a buyer is selected and \texttt{completed} once the transaction closes. & High & \planned\\
+FR-LST-8 & The system should allow the owner to edit a listing; an edited live listing shall return to moderation. & Medium & \impl\\
+FR-LST-9 & The system shall mark a listing \texttt{reserved} once a buyer is selected and \texttt{completed} once the transaction closes. & High & \impl\\
 \end{reqtable}
-{\footnotesize \textsuperscript{a} Listing creation works for every signed-in student; the check that the student is \emph{verified} is not yet enforced on \texttt{POST /listings} (see Appendix~\ref{app:gaps}).}
 
 % ---------------------------------------------------------------
 \section{Listing Moderation}
 \textbf{Description and priority:} Every listing is reviewed by a human
-before it becomes visible. \emph{Priority: High.}
+before it becomes visible, and students can report a listing or a person
+afterwards so an administrator can take it down. \emph{Priority: High.}
 
 \begin{reqtable}
 FR-MOD-1 & When a listing is created, the system shall insert a corresponding entry into the moderation queue with status \texttt{pending}; if this fails, the listing shall be rolled back. & High & \impl\\
@@ -434,8 +450,11 @@ FR-MOD-2 & The system shall show administrators the queue of pending listings wi
 FR-MOD-3 & An administrator shall be able to approve a listing, which sets the listing to \texttt{live} and records the reviewer and time. & High & \impl\\
 FR-MOD-4 & An administrator shall be able to reject a listing with a reason, which sets the listing to \texttt{removed}. & High & \impl\\
 FR-MOD-5 & The system shall record submission and decision timestamps so that TLC can be measured. & High & \impl\\
-FR-MOD-6 & The system should notify the owner when their listing is approved or rejected, including the reason. & Medium & \planned\\
+FR-MOD-6 & The system should notify the owner when their listing is approved or rejected, including the reason. & Medium & \impl\\
 FR-MOD-7 & The system may obtain a confidence score from an off-the-shelf moderation API to help prioritise the queue; it shall never auto-reject on that score. & Low & \planned\\
+FR-MOD-8 & Any signed-in student shall be able to report a live listing, or another student they have chatted with, choosing a reason (scam, fake, prohibited item, wrong details, offensive, other) and adding optional details. A student may have only one open report per listing or person, and cannot report their own listing or themselves. & High & \impl\\
+FR-MOD-9 & Administrators shall see open reports with what was reported, by whom and how many open reports it has, and shall dismiss each one or act on it with a note. Acting on a listing report, or taking a listing down directly, shall remove the listing from the feed for good, call off and refund any deal on it that has not reached the handoff, and close every open report on that listing. & High & \impl\\
+FR-MOD-10 & The system shall notify administrators of each new report, tell the owner why their listing was taken down (also shown on the listing and under My listings), tell both parties when a deal is called off by a takedown, and tell each reporter the outcome. & Medium & \impl\\
 \end{reqtable}
 
 % ---------------------------------------------------------------
@@ -445,7 +464,7 @@ interested buyer and the owner, with structured price offers.
 \emph{Priority: High.}
 
 \begin{reqtable}
-FR-CHT-1 & The system shall let a signed-in user start a chat on another user's live listing; there shall be at most one thread per buyer per listing, and starting it again shall return the existing thread. & High & \impl\\
+FR-CHT-1 & The system shall let a verified student start a chat on another student's live listing; there shall be at most one thread per buyer per listing, and starting it again shall return the existing thread. Students whose ID is not verified, and guests, cannot start a chat. & High & \impl\\
 FR-CHT-2 & The system shall prevent a user from starting a chat on their own listing. & High & \impl\\
 FR-CHT-3 & The system shall let participants send text messages and view the thread's history in time order (up to the latest 200 messages). & High & \impl\\
 FR-CHT-4 & The system shall list a user's chat threads, each with its listing and last message. & High & \impl\\
@@ -453,35 +472,39 @@ FR-CHT-5 & The system shall return ``forbidden'' to any user who is not a partic
 FR-CHT-6 & Either participant shall be able to propose a price offer; only the other participant shall be able to accept or reject it. & High & \impl\\
 FR-CHT-7 & Accepting an offer shall automatically reject all other pending offers in that thread, and no further offers shall be allowed in that thread. & High & \impl\\
 FR-CHT-8 & The app shall show messages and offers in one combined timeline ordered by time. & Medium & \impl\\
-FR-CHT-9 & The seller shall be able to choose one buyer among several concurrent negotiations and finalise the deal, creating a transaction. & High & \planned\\
-FR-CHT-10 & Messages should be delivered in real time (WebSocket) rather than by polling. & Medium & \planned\\
+FR-CHT-9 & The seller shall be able to choose one buyer among several concurrent negotiations and finalise the deal, creating a transaction. & High & \impl\\
+FR-CHT-10 & Messages should be delivered in real time (Supabase Realtime) rather than by polling. & Medium & \impl\\
+FR-CHT-11 & A deal shall be confirmed by both parties: one participant proposes the terms and only the other can accept them; the owner finalises the accepted terms, at exactly that price; the payer confirms by paying into escrow; and the receiver confirms the handoff by scanning the QR code. & High & \impl\\
 \end{reqtable}
 
 % ---------------------------------------------------------------
 \section{Payment and Escrow}
 \textbf{Description and priority:} A shared transaction core used by all
-three modules. \emph{Priority: High (next phase).}
+three modules. \emph{Priority: High.}
 
 \begin{reqtable}
-FR-PAY-1 & When a deal is finalised, the system shall create a transaction recording listing, type, buyer, seller, agreed price and meeting location, with status \texttt{pending_payment}. & High & \planned\\
-FR-PAY-2 & The system shall collect the buyer's payment through the payment gateway and hold it in escrow (status \texttt{escrow_held}). & High & \planned\\
-FR-PAY-3 & For Lend transactions, the system shall record start date, end date, deposit amount and rent per day. & High & \planned\\
-FR-PAY-4 & The system shall release escrow to the seller only after a successful handoff (and, for Lend, a completed return). & High & \planned\\
-FR-PAY-5 & The system shall refund the buyer if the transaction is cancelled before handoff or a dispute is decided in the buyer's favour. & High & \planned\\
-FR-PAY-6 & The system shall show both parties the current transaction status. & Medium & \planned\\
+FR-PAY-1 & When a deal is finalised, the system shall create a transaction recording listing, type, buyer, seller, agreed price and meeting location, with status \texttt{pending_payment}. & High & \impl\\
+FR-PAY-2 & The system shall collect the buyer's payment through the payment gateway and hold it in escrow (status \texttt{escrow_held}). In the pilot the gateway is simulated: the hold is recorded but no money moves. & High & \partl\\
+FR-PAY-3 & For Lend transactions, the system shall record start date, end date, deposit amount and rent per day. & High & \impl\\
+FR-PAY-4 & The system shall release escrow to the seller only after a successful handoff (and, for Lend, a completed return). & High & \impl\\
+FR-PAY-5 & The system shall refund the buyer if the transaction is cancelled before handoff or a dispute is decided in the buyer's favour. & High & \impl\\
+FR-PAY-6 & The system shall show both parties the current transaction status. & Medium & \impl\\
+FR-PAY-7 & Either party shall be able to cancel a deal before the handoff (pending payment, escrow held or QR issued). Any money held is refunded, every QR code for the deal stops working, and the listing returns to live. A deal cannot be cancelled once the item has changed hands, while it is disputed, or by anyone else. & High & \impl\\
+FR-PAY-8 & For an Exchange, escrow shall hold the agreed top-up, if any. The person asking to swap names and photographs their item; either side may add a top-up and must say who pays it; only that side can pay it; on a completed handoff it goes to the other side, and a cancelled swap returns it to the payer. A straight swap holds Rs.~0 and goes straight to the meetup. & High & \impl\\
 \end{reqtable}
 
 % ---------------------------------------------------------------
 \section{QR-Verified Handoff}
 \textbf{Description and priority:} Confirms the physical meeting before money
-moves. \emph{Priority: High (next phase).}
+moves. \emph{Priority: High.}
 
 \begin{reqtable}
-FR-HND-1 & After payment is held, the system shall issue a signed, single-use, time-bound QR token for the transaction (status \texttt{qr_issued}). & High & \planned\\
-FR-HND-2 & At the meeting, the counter-party shall scan the QR code in the app; the system shall accept it only if it is valid, unexpired, unused and belongs to that transaction. & High & \planned\\
-FR-HND-3 & The system shall require condition photographs to be captured at handoff and store them against the transaction. & High & \planned\\
-FR-HND-4 & On a valid scan, the system shall mark the token used, and for Sell/Exchange shall complete the transaction and release escrow. & High & \planned\\
-FR-HND-5 & Either party shall be able to flag a discrepancy at handoff instead of confirming, which moves the transaction to \texttt{disputed}. & High & \planned\\
+FR-HND-1 & After payment is held, the system shall issue a random, single-use QR code for the transaction that expires after 10 minutes (status \texttt{qr_issued}). & High & \impl\\
+FR-HND-2 & At the meeting, the counter-party shall scan the QR code in the app; the system shall accept it only if it is valid, unexpired, unused and belongs to that transaction. & High & \impl\\
+FR-HND-3 & The system shall require condition photographs to be captured at handoff and store them against the transaction. & High & \impl\\
+FR-HND-4 & On a valid scan, the system shall mark the token used, and for Sell/Exchange shall complete the transaction and release escrow. & High & \impl\\
+FR-HND-5 & Either party shall be able to flag a discrepancy at handoff instead of confirming, which moves the transaction to \texttt{disputed}. & High & \impl\\
+FR-HND-6 & If a QR code expires, the giver shall be able to show a new one, which replaces the old. If a party does not turn up, either party may cancel before the handoff (FR-PAY-7) or report it as a problem, which freezes the money for an administrator (FR-HND-5). & Medium & \impl\\
 \end{reqtable}
 
 % ---------------------------------------------------------------
@@ -490,10 +513,10 @@ FR-HND-5 & Either party shall be able to flag a discrepancy at handoff instead o
 what and when it is due back. \emph{Priority: Medium.}
 
 \begin{reqtable}
-FR-LND-1 & For a Lend transaction, the system shall keep it open after handoff until the item is returned. & High & \planned\\
-FR-LND-2 & The system shall require return-stage condition photographs and a QR-verified return. & High & \planned\\
-FR-LND-3 & The system should remind the borrower before the due date and flag overdue items. & Medium & \planned\\
-FR-LND-4 & On a confirmed return with no reported issue, the system shall settle rent and refund the deposit. & High & \planned\\
+FR-LND-1 & For a Lend transaction, the system shall keep it open after handoff until the item is returned. & High & \impl\\
+FR-LND-2 & The system shall require return-stage condition photographs and a QR-verified return. & High & \impl\\
+FR-LND-3 & The system should remind the borrower before the due date and flag overdue items. & Medium & \impl\\
+FR-LND-4 & On a confirmed return with no reported issue, the system shall settle rent and refund the deposit. & High & \impl\\
 \end{reqtable}
 
 % ---------------------------------------------------------------
@@ -502,21 +525,21 @@ FR-LND-4 & On a confirmed return with no reported issue, the system shall settle
 \emph{Priority: Medium.}
 
 \begin{reqtable}
-FR-DSP-1 & A party to a transaction shall be able to raise one dispute per transaction with a reason. & High & \planned\\
-FR-DSP-2 & The system shall freeze escrow while a dispute is open. & High & \planned\\
-FR-DSP-3 & Administrators shall see open disputes with handoff and return condition photographs side by side. & High & \planned\\
-FR-DSP-4 & An administrator shall be able to request more evidence, then resolve the dispute with a written resolution, releasing or refunding escrow. & High & \planned\\
-FR-DSP-5 & An administrator may apply a penalty amount to the party at fault, per pre-defined penalty tiers. & Medium & \planned\\
-FR-DSP-6 & The system shall notify both parties of each change in dispute status. & Medium & \planned\\
+FR-DSP-1 & A party to a transaction shall be able to raise one dispute per transaction with a reason. & High & \impl\\
+FR-DSP-2 & The system shall freeze escrow while a dispute is open. & High & \impl\\
+FR-DSP-3 & Administrators shall see open disputes with handoff and return condition photographs side by side. & High & \impl\\
+FR-DSP-4 & An administrator shall be able to request more evidence, then resolve the dispute with a written resolution, releasing or refunding escrow. & High & \impl\\
+FR-DSP-5 & An administrator may apply a penalty amount to the party at fault, per pre-defined penalty tiers. & Medium & \impl\\
+FR-DSP-6 & The system shall notify both parties of each change in dispute status. & Medium & \impl\\
 \end{reqtable}
 
 % ---------------------------------------------------------------
 \section{Notifications and Category Alerts}
 \textbf{Priority: Medium.}
 \begin{reqtable}
-FR-NTF-1 & The system shall store in-app notifications per user with a type, payload and read/unread flag. & Medium & \planned\\
-FR-NTF-2 & The system shall notify users of listing decisions, new messages and offers, transaction updates and dispute updates. & Medium & \planned\\
-FR-NTF-3 & The system should let a student subscribe to categories and alert them when a matching listing goes live (and match Exchange want-tags). & Low & \planned\\
+FR-NTF-1 & The system shall store in-app notifications per user with a type, payload and read/unread flag. & Medium & \impl\\
+FR-NTF-2 & The system shall notify users of listing decisions, new messages and offers, transaction updates and dispute updates. & Medium & \impl\\
+FR-NTF-3 & The system should let a student subscribe to categories and alert them when a matching listing goes live (and match Exchange want-tags). & Low & \impl\\
 \end{reqtable}
 
 % ---------------------------------------------------------------
@@ -527,8 +550,8 @@ FR-ADM-1 & The system shall show an admin-only \emph{Review} tab to users with \
 FR-ADM-2 & The backend shall re-check the caller's admin role from the database on every \texttt{/admin} request, returning 403 to non-admins, regardless of what the app displays. & High & \impl\\
 FR-ADM-3 & The system shall show admins pending ID cards, each via a signed URL valid for 10 minutes. & High & \impl\\
 FR-ADM-4 & An admin shall be able to mark an ID card \texttt{verified} or \texttt{rejected}. & High & \impl\\
-FR-ADM-5 & The system should show platform analytics: TLC (median), listing volume by type, transaction completion rate, dispute rate and on-time return rate. & Medium & \planned\\
-FR-ADM-6 & A separate web dashboard may be provided for administrators. & Low & \planned\\
+FR-ADM-5 & The system should show platform analytics: TLC (median, 90th percentile and share decided within 24 hours), listing volume by type, transaction completion rate, the share of transactions that are lend/borrow, the on-time return rate, and the dispute rate for lend deals and for all deals. & Medium & \impl\\
+FR-ADM-6 & A separate web dashboard may be provided for administrators. The admin screens run in a web browser and serve as this dashboard. & Low & \impl\\
 \end{reqtable}
 
 % =====================================================================
@@ -540,16 +563,18 @@ The mobile app uses bottom-tab navigation. Screens:
 \caption{Main screens}\label{tab:screens}\\
 \toprule
 \textbf{Screen} & \textbf{Purpose}\\ \midrule\endhead
-Sign up / Sign in & Enter college email, then the 6-digit OTP\\
-Onboarding: ID card & Enter roll number and photograph/upload the ID card\\
-Home (feed) & Sell / Lend / Barter segmented control, category chips, search box, listing cards\\
-Listing detail & Photos, details, meeting point (hidden for guests), ``Chat with seller''\\
-Create & Listing form with type-specific fields, photo picker, condition and meeting-point pickers\\
-Chats / Chat thread & Thread list; messages and offer cards (accept / reject / counter) in one timeline\\
-History (My listings) & Own listings with status badges; delete action\\
-Profile & Account details, verification status, sign out\\
-Review (admin only) & Moderation queue and ID-verification queue\\
-Transaction, QR and Disputes (planned) & Payment, QR display/scan, condition-photo capture, dispute form\\
+Sign up / Sign in & Enter name, college email and roll number, then the 6-digit OTP\\
+Onboarding: ID card & Photograph or upload the student ID card\\
+Home (feed) & Sell / Lend / Exchange control, category chips, search, Newest / Nearest toggle, notifications bell, listing cards with distance\\
+Listing detail & Photo gallery, details, meeting point and distance (hidden for guests), ``Chat with seller'', Report this listing; for the owner, Edit, exchange matches and any takedown reason; for admins, Take down\\
+Create / Edit listing & Listing form with type-specific fields, photo picker, condition and a searchable meeting-point picker\\
+Chats / Chat thread & Thread list; messages and offer cards (accept / reject / counter) in one timeline; swap item offers with photos; finalise panel with lend dates, deposit and meeting point; Report this student\\
+Deals / Deal detail & Status in plain language, pay, condition photos, Show QR / Scan QR, cancel, report a problem\\
+Scan & Camera QR scanner (or type the 8-character code)\\
+My listings & Own listings with status badges; edit and delete\\
+Notifications & Inbox, mark read, category alerts\\
+Profile & Account details, verification status, hostel, deals, sign out\\
+Review (admin only) & Dashboard of metrics, moderation queue, ID-verification queue, report queue (take down / dismiss), dispute queue with photos and penalty tiers\\
 \bottomrule
 \end{longtable}
 UI requirements: consistent colour and component library (buttons,
@@ -558,19 +583,19 @@ an empty state and a readable error message; pull-to-refresh on lists.
 
 \section{Hardware Interfaces}
 The app uses the phone's camera and photo library (ID card, listing
-photos, condition photos) and, in the next phase, the camera as a QR
-scanner. No GPS is required.
+photos, condition photos) and the camera as a QR scanner. No GPS is required.
 
 \section{Software Interfaces}
 \begin{longtable}{L{3.6cm} L{11.6cm}}
 \toprule
 \textbf{System} & \textbf{Interface}\\ \midrule\endhead
 Supabase Auth & Called directly from the app: \texttt{signInWithOtp}, \texttt{verifyOtp}, \texttt{signOut}. Backend validates the bearer token with \texttt{auth.getUser}.\\
-Supabase PostgreSQL & Accessed only by the backend using the service-role key; 13 tables (Section~\ref{sec:data}).\\
-Supabase Storage & \texttt{id-cards} (private) and \texttt{listing-images} (public) buckets.\\
+Supabase PostgreSQL & Accessed by the backend using the service-role key; 17 tables, all with Row-Level Security (Section~\ref{sec:data}). The app reads only its own chats and notifications, through Realtime and narrow RLS policies.\\
+Supabase Storage & \texttt{id-cards} and \texttt{condition-photos} (private, shown through signed links) and \texttt{listing-images} (public) buckets.\\
+Supabase Realtime & Live delivery of messages, offers, deal updates and notifications to the two people involved.\\
 SMTP provider & Delivers OTP emails using custom templates showing the code.\\
-Payment gateway (planned) & Create payment, hold, release and refund; sandbox mode for the pilot.\\
-Push service (planned) & Expo push notifications for alerts.\\
+Payment gateway (simulated) & Create payment, hold, release and refund. Simulated in the pilot; a real gateway replaces \texttt{pay}, \texttt{settle} and \texttt{refund} only.\\
+Expo push service & Phone notifications for offers, deals and disputes (needs a development build of the app).\\
 \bottomrule
 \end{longtable}
 
@@ -578,30 +603,38 @@ Push service (planned) & Expo push notifications for alerts.\\
 All client--server communication uses HTTPS and JSON (multipart form data
 for uploads). Authenticated requests carry
 \texttt{Authorization: Bearer <access token>}. Table~\ref{tab:api}
-summarises the REST API.
+summarises the REST API; \texttt{docs/api-contract.md} gives every rule and
+response. Over the rate limits the API answers 429.
 
-{\small\begin{longtable}{L{1.9cm} L{5.7cm} L{1.9cm} L{4.8cm}}
+{\small\begin{longtable}{L{2.3cm} L{5.6cm} L{1.9cm} L{4.5cm}}
 \caption{REST API summary}\label{tab:api}\\
 \toprule
 \textbf{Method} & \textbf{Route} & \textbf{Access} & \textbf{Purpose}\\ \midrule\endhead
 GET & \texttt{/health} & Public & Liveness check\\
-GET & \texttt{/profile/me} & Auth & Caller's profile\\
-PATCH & \texttt{/profile/roll-number} & Auth & Set roll number\\
+GET/PATCH & \texttt{/profile/me}, \texttt{/profile} & Auth & Own profile; set name, roll number, hostel\\
 POST & \texttt{/profile/id-card} & Auth & Upload ID card\\
-GET & \texttt{/listings} & Public & Live feed (filters: type, category, search)\\
-GET & \texttt{/listings/:id} & Public & Listing detail\\
+GET & \texttt{/campus/locations} & Public & Hostels and meeting points\\
+GET & \texttt{/listings} & Public & Live feed (type, category, search, sort, limit, offset)\\
+GET & \texttt{/listings/:id}, \texttt{/listings/:id/matches} & Public & Listing detail; exchange matches\\
 GET & \texttt{/listings/mine} & Auth & Own listings, all statuses\\
-POST & \texttt{/listings} & Auth & Create listing (pending review)\\
-POST & \texttt{/listings/images} & Auth & Upload a listing photo\\
+POST/PATCH & \texttt{/listings}, \texttt{/listings/:id} & Verified & Create or edit (back to review)\\
+POST & \texttt{/listings/images} & Verified & Upload a listing photo\\
 DELETE & \texttt{/listings/:id} & Owner & Delete own listing\\
-GET/POST & \texttt{/chats} & Auth & List / open a thread\\
+GET/POST & \texttt{/chats} & Auth / Verified & List / open a thread\\
 GET/POST & \texttt{/chats/:id/messages} & Participant & Read / send messages\\
 GET/POST & \texttt{/chats/:id/offers} & Participant & Read / make offers\\
 POST & \texttt{/chats/offers/:id/} \texttt{accept|reject} & Recipient & Respond to offer\\
-GET & \texttt{/admin/moderation} & Admin & Pending listings\\
-POST & \texttt{/admin/moderation/:id/} \texttt{approve|reject} & Admin & Moderation decision\\
-GET & \texttt{/admin/id-verifications} & Admin & Pending ID cards\\
-POST & \texttt{/admin/id-verifications/:userId} & Admin & ID decision\\
+GET/POST & \texttt{/transactions} & Party / Owner & List deals / finalise a deal\\
+GET & \texttt{/transactions/:id} & Party & Deal detail\\
+POST & \texttt{/transactions/:id/} \texttt{pay|qr|photos|} \texttt{scan|cancel|dispute} & Party & Deal steps\\
+GET/POST & \texttt{/notifications}, \texttt{.../read}, \texttt{.../push-token}, \texttt{.../subscriptions} & Auth & Inbox, phone token, category alerts\\
+GET & \texttt{/admin/stats} & Admin & Dashboard metrics\\
+GET/POST & \texttt{/admin/moderation}, \texttt{.../:id/approve|reject} & Admin & Moderation\\
+GET/POST & \texttt{/admin/id-verifications}, \texttt{.../:userId} & Admin & ID decisions\\
+GET/POST & \texttt{/admin/disputes}, \texttt{.../review|resolve}, \texttt{.../penalty-tiers} & Admin & Disputes and penalties\\
+POST & \texttt{/reports} & Auth & Report a listing or a student\\
+GET/POST & \texttt{/admin/reports}, \texttt{.../:id/resolve} & Admin & Report queue and decisions\\
+POST & \texttt{/admin/listings/:id/takedown} & Admin & Take a listing down\\
 \bottomrule
 \end{longtable}}
 
@@ -614,7 +647,7 @@ NFR-PRF-1 & The feed and listing-detail endpoints should respond within 1.5 s (9
 NFR-PRF-2 & The system should support at least 100 concurrent users and semester-start spikes of several hundred new listings per day without degradation. & Medium & \planned\\
 NFR-PRF-3 & Feed queries shall use indexes on (\texttt{status}, \texttt{category}) and owner. & Medium & \impl\\
 NFR-PRF-4 & Images shall be limited to 8 MB on upload, and the app should compress photos before uploading to save mobile data. & Medium & \partl\\
-NFR-PRF-5 & A sent chat message should appear for the other participant within 5 s (currently 4 s polling; real-time after WebSocket upgrade). & Medium & \impl\\
+NFR-PRF-5 & A sent chat message should appear for the other participant within 5 s (Supabase Realtime, with a slow fallback poll). & Medium & \impl\\
 \end{reqtable}
 
 \section{Security}
@@ -623,10 +656,12 @@ NFR-SEC-1 & Every non-public endpoint shall validate the bearer token before run
 NFR-SEC-2 & Authorisation (admin role, listing ownership, chat participation, offer recipient) shall be enforced on the server; client-side checks are for display only. & High & \impl\\
 NFR-SEC-3 & The service-role key shall exist only in the backend environment; secrets shall be kept in git-ignored \texttt{.env} files. & High & \impl\\
 NFR-SEC-4 & ID card images shall be stored in a private bucket and exposed only to admins through signed URLs that expire in 10 minutes. & High & \impl\\
-NFR-SEC-5 & Row-Level Security shall be enabled on all tables before any wider release, so the public (anon) key cannot read or write tables directly. & High & \planned\\
-NFR-SEC-6 & All input shall be validated at the API boundary (types, lengths, enums, file type and size). & High & \impl\\
-NFR-SEC-7 & QR tokens shall be cryptographically signed, single-use and expire after a short window. & High & \planned\\
+NFR-SEC-5 & Row-Level Security shall be enabled on all tables before any wider release, so the public (anon) key cannot read or write tables directly. & High & \impl\\
+NFR-SEC-6 & All input shall be validated at the API boundary (types, lengths, enums, file type and size). Photos are checked by their contents (JPEG, PNG, WebP or HEIC only), cut off at 8 MB while uploading, and stored under names the server chooses; listings and offers may only use photos the student uploaded. & High & \impl\\
+NFR-SEC-7 & QR codes shall be random, single-use, bound to one transaction and expire after 10 minutes. & High & \impl\\
 NFR-SEC-8 & All traffic in deployment shall use HTTPS. & High & \planned\\
+NFR-SEC-9 & Each signed-in session shall be rate limited per endpoint (120 requests and 30 writes a minute, 20 new listings an hour, 40 photo uploads per 10 minutes); a request over the limit receives 429. & High & \impl\\
+NFR-SEC-10 & Responses shall carry standard security headers, browser access shall be limited to configured origins in deployment, and CI shall fail on a high or critical vulnerability in a production dependency. & Medium & \impl\\
 \end{reqtable}
 
 \section{Privacy}
@@ -634,7 +669,8 @@ NFR-SEC-8 & All traffic in deployment shall use HTTPS. & High & \planned\\
 NFR-PRV-1 & The system shall collect only the identity data needed: email, name, roll number and ID-card image. & High & \impl\\
 NFR-PRV-2 & A guest shall never receive a listing's meeting location. & High & \impl\\
 NFR-PRV-3 & A user's email and roll number shall not be shown to other students. & High & \impl\\
-NFR-PRV-4 & Condition photographs shall be stored privately and visible only to the two parties and admins. & Medium & \planned\\
+NFR-PRV-5 & Each roll number shall belong to at most one account. & High & \impl\\
+NFR-PRV-4 & Condition photographs shall be stored privately (encrypted at rest by the storage provider) and shown only to the two parties and admins, through links that expire. & Medium & \impl\\
 \end{reqtable}
 
 \section{Reliability and Availability}
@@ -662,16 +698,16 @@ NFR-POR-3 & The backend shall be stateless so it can be deployed on any Node.js 
 \section{Maintainability and Quality}
 \begin{reqtable}
 NFR-MNT-1 & Code shall be written in TypeScript (strict mode) and organised by feature module in both app and backend. & High & \impl\\
-NFR-MNT-2 & Each push shall trigger CI that type-checks the mobile app and builds the backend; failing builds shall not be merged. & High & \impl\\
+NFR-MNT-2 & Each push shall trigger CI that type-checks, lints and unit-tests the mobile app and the backend, runs the end-to-end tests, builds the backend and audits dependencies; failing builds shall not be merged. & High & \impl\\
 NFR-MNT-3 & Schema changes shall be made through numbered migration files in \texttt{supabase/migrations}. & High & \impl\\
 NFR-MNT-4 & Every API endpoint shall be documented in \texttt{docs/api-contract.md}. & Medium & \impl\\
-NFR-MNT-5 & Unit and integration tests should cover the offer rules, moderation flow and transaction state transitions. & Medium & \planned\\
+NFR-MNT-5 & Unit and end-to-end tests shall cover every functional requirement that software can check; the rest shall have manual test cases. & Medium & \impl\\
 \end{reqtable}
 
 \section{Scalability}
 \begin{reqtable}
-NFR-SCL-1 & Listing and search queries should support pagination and indexing so they keep within NFR-PRF-1 as listings grow. & Medium & \partl\\
-NFR-SCL-2 & The system should be deployable with a managed database, a platform-hosted backend and a CI/CD pipeline to staging. & Medium & \planned\\
+NFR-SCL-1 & Listing and search queries should support pagination and indexing so they keep within NFR-PRF-1 as listings grow. & Medium & \impl\\
+NFR-SCL-2 & The system should be deployable with a managed database, a platform-hosted backend and a CI/CD pipeline to staging. (CI is in place; deployment is not yet.) & Medium & \partl\\
 \end{reqtable}
 
 % =====================================================================
@@ -692,13 +728,16 @@ pay or raise disputes.
 \end{figure}
 
 \section{Class / Entity-Relationship Diagram}
-Figure~\ref{fig:er} shows the thirteen database tables with their keys and
-constraints.
+Figure~\ref{fig:er} shows the thirteen core database tables with their keys
+and constraints. Three support tables were added later
+(\texttt{category_subscriptions}, \texttt{campus_locations},
+\texttt{push_tokens}, \texttt{reports}); Table~\ref{tab:data} lists all
+seventeen.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\textwidth]{figures/class-er.png}
-  \caption{Class / ER diagram (13 tables)}
+  \caption{Class / ER diagram (13 core tables)}
   \label{fig:er}
 \end{figure}
 
@@ -707,19 +746,23 @@ constraints.
 \caption{Database tables}\label{tab:data}\\
 \toprule
 \textbf{Table} & \textbf{Purpose and key attributes}\\ \midrule\endhead
-\texttt{users} & Profile extending Supabase \texttt{auth.users}: id (FK), name, email, roll\_number, id\_card\_image\_url, id\_verified, role, created\_at\\
-\texttt{listings} & owner\_id, type, title, description, images[], category, condition, price / rent\_amount + rent\_unit / want\_tags[], meeting\_location, status\\
+\texttt{users} & Profile extending Supabase \texttt{auth.users}: id (FK), name, email, roll\_number (unique), id\_card\_image\_url, id\_verified, role, hostel, penalty\_total, created\_at\\
+\texttt{listings} & owner\_id, type, title, description, images[], category, condition, price / rent\_amount + rent\_unit / want\_tags[], meeting\_location, status, taken\_down\_at / reason / by\\
 \texttt{moderation_queue} & listing\_id, ai\_flag\_score, status, reviewed\_by, reason, reviewed\_at\\
 \texttt{chats} & listing\_id, initiator\_id, owner\_id; unique (listing\_id, initiator\_id)\\
 \texttt{messages} & chat\_id, sender\_id, content, sent\_at\\
-\texttt{offers} & chat\_id, sender\_id, offered\_price, status\\
-\texttt{transactions} & listing\_id, type, buyer\_id, seller\_id, agreed\_price, status, meeting\_location\\
+\texttt{offers} & chat\_id, sender\_id, offered\_price, status; for exchanges item\_title, item\_description, item\_images[], topup\_payer\\
+\texttt{transactions} & listing\_id, type, buyer\_id, seller\_id, payer\_id, agreed\_price, status, meeting\_location, completed\_at\\
 \texttt{escrow_holds} & transaction\_id (unique), amount, status, held\_at, released\_at\\
-\texttt{qr_tokens} & transaction\_id, token (unique), expires\_at, used, used\_at\\
+\texttt{qr_tokens} & transaction\_id, token (unique), purpose (handoff / return), expires\_at, used, used\_at\\
 \texttt{lend_details} & transaction\_id (PK), start\_date, end\_date, deposit\_amount, rent\_per\_day\\
 \texttt{condition_photos} & transaction\_id, stage (handoff / return), image\_url, uploaded\_by\\
-\texttt{disputes} & transaction\_id (unique), raised\_by, reason, status, admin\_id, resolution, penalty\_amount\\
+\texttt{disputes} & transaction\_id (unique), raised\_by, reason, status, admin\_id, resolution, penalty\_tier, penalty\_amount, penalty\_user\_id\\
 \texttt{notifications} & user\_id, type, payload (JSON), read\\
+\texttt{category_subscriptions} & user\_id, category: who gets an alert when a listing in that category goes live\\
+\texttt{campus_locations} & name, kind (hostel / spot), old name and aliases, latitude, longitude\\
+\texttt{push_tokens} & token (unique), user\_id, platform: the phones that receive push notifications\\
+\texttt{reports} & reporter\_id, listing\_id or reported\_user\_id, reason, details, status (open / actioned / dismissed), admin\_id, admin\_note\\
 \bottomrule
 \end{longtable}
 
@@ -728,10 +771,11 @@ constraints.
 \caption{Lifecycle states}\label{tab:states}\\
 \toprule
 \textbf{Entity} & \textbf{States and transitions}\\ \midrule\endhead
-Listing & \texttt{pending_review} $\rightarrow$ \texttt{live} (approved) or \texttt{removed} (rejected / deleted); \texttt{live} $\rightarrow$ \texttt{reserved} (buyer selected) $\rightarrow$ \texttt{completed}\\
+Listing & \texttt{pending_review} $\rightarrow$ \texttt{live} (approved) or \texttt{removed} (rejected / deleted); \texttt{live} $\rightarrow$ \texttt{reserved} (buyer selected) $\rightarrow$ \texttt{completed}, or back to \texttt{live} if the deal is cancelled; \texttt{live}, \texttt{reserved} or \texttt{pending_review} $\rightarrow$ \texttt{removed} for good when an admin takes it down\\
+Report & \texttt{open} $\rightarrow$ \texttt{actioned} or \texttt{dismissed}\\
 ID verification & \texttt{pending} $\rightarrow$ \texttt{verified} or \texttt{rejected}; \texttt{rejected} $\rightarrow$ \texttt{pending} on re-upload\\
 Offer & \texttt{pending} $\rightarrow$ \texttt{accepted} or \texttt{rejected}\\
-Transaction & \texttt{pending_payment} $\rightarrow$ \texttt{escrow_held} $\rightarrow$ \texttt{qr_issued} $\rightarrow$ \texttt{completed}; from \texttt{qr_issued} $\rightarrow$ \texttt{disputed} $\rightarrow$ \texttt{completed} or \texttt{refunded}\\
+Transaction & \texttt{pending_payment} $\rightarrow$ \texttt{escrow_held} $\rightarrow$ \texttt{qr_issued} $\rightarrow$ \texttt{completed} (sell, exchange) or \texttt{in_use} $\rightarrow$ \texttt{completed} on return (lend); cancelled before handoff $\rightarrow$ \texttt{cancelled} (unpaid) or \texttt{refunded} (paid); from \texttt{escrow_held}, \texttt{qr_issued} or \texttt{in_use} $\rightarrow$ \texttt{disputed} $\rightarrow$ \texttt{completed} or \texttt{refunded}\\
 Escrow & \texttt{held} $\rightarrow$ \texttt{released} or \texttt{refunded}\\
 Dispute & \texttt{open} $\rightarrow$ \texttt{under_review} $\rightarrow$ \texttt{resolved}\\
 \bottomrule
@@ -791,6 +835,12 @@ Dispute & \texttt{open} $\rightarrow$ \texttt{under_review} $\rightarrow$ \textt
   \item Automated tools may flag content but never reject, ban or penalise;
     an administrator makes every final decision.
   \item All meetings take place at approved on-campus meeting points.
+  \item Penalties come from fixed tiers (Rs.~50, Rs.~200, Rs.~500) and
+    are added to the student's record, which admins see when deciding later
+    disputes.
+  \item One account per roll number.
+  \item A listing taken down by an administrator never returns to the feed.
+  \item Either party may cancel before the handoff; nobody may cancel after it.
 \end{enumerate}
 
 % =====================================================================
@@ -813,6 +863,30 @@ Reliability & Uptime of login, listing, payment at peak & $\geq$ 99\%\\
 The pilot involves 30--40 students (freshers, graduating seniors and hostel
 residents) and 2--3 volunteer moderators.
 
+\section{Verification}\label{sec:verification}
+Every functional requirement has at least one test case. The full list, with
+steps, expected results and the result of the latest run, is in
+\texttt{docs/testing/TEST-CASES.md}, which is generated from the test results.
+
+\begin{longtable}{L{4.2cm} L{1.5cm} L{8.9cm}}
+\caption{Test summary (automated run of 23 November 2026)}\label{tab:tests}\\
+\toprule
+\textbf{Kind of test} & \textbf{Count} & \textbf{What it checks}\\ \midrule\endhead
+End-to-end API tests & 344 & The built backend called over HTTP as real test users, on a real PostgreSQL database with every migration and RLS policy. Each test is named after its requirement. All pass.\\
+Unit tests & 35 & Backend helpers (file-type check, rate limits, campus dates, want-tag matching, verification guard) and app helpers (email check, dates, distances). All pass.\\
+Manual test cases & 16 & What needs a phone: OTP email, staying signed in, camera QR scan, live chat on two phones, screens, push on a development build. Results are recorded by the team, with tester and date, in the test-case sheet.\\
+\bottomrule
+\end{longtable}
+
+Of the 81 functional requirements, 73 are covered by automated tests (10 of
+them also by a manual check), 6 only by manual test cases, and 2 are not
+built (FR-AUTH-10 and FR-MOD-7, both Low priority). Of the 37 non-functional
+requirements, 17 pass automated tests, 9 are checked in CI or by inspection, 2
+by manual cases, 7 can only be measured once the pilot is deployed (load,
+uptime, HTTPS, usability, budget phones), and 2 have no test case yet
+(NFR-REL-4 and NFR-USE-3). The automated tests run on every push in GitHub
+Actions (NFR-MNT-2).
+
 \section{Traceability Matrix}
 \begin{longtable}{L{4.4cm} L{4.4cm} L{5.9cm}}
 \caption{Objectives and proposal features traced to requirements}\label{tab:trace}\\
@@ -820,9 +894,9 @@ residents) and 2--3 volunteer moderators.
 \textbf{Objective / pain point} & \textbf{Proposal feature} & \textbf{Requirements}\\ \midrule\endhead
 O1 / ``Strangers, no proof'' & Verified access & FR-AUTH-1--10, FR-ADM-3--4, NFR-SEC-1--4\\
 O2 / ``No single place to look'' & Sell, Lend, Exchange modules & FR-BRW-1--8, FR-LST-1--9\\
-O3 & Trust \& safety layer (moderation) & FR-MOD-1--7, FR-ADM-1--2\\
-O4 & In-app chat \& negotiation & FR-CHT-1--10\\
-O5 / ``No recourse'' & Payments (escrow), QR handoff & FR-PAY-1--6, FR-HND-1--5\\
+O3 & Trust \& safety layer (moderation, reports, takedown) & FR-MOD-1--10, FR-ADM-1--2\\
+O4 & In-app chat \& negotiation & FR-CHT-1--11\\
+O5 / ``No recourse'' & Payments (escrow), QR handoff & FR-PAY-1--8, FR-HND-1--6\\
 O5 / ``Lending has no memory'' & Lend/Borrow module & FR-LND-1--4, FR-PAY-3\\
 O6 & Admin dispute handling & FR-DSP-1--6\\
 O7 & Evaluation (TLC) & FR-MOD-5, FR-ADM-5\\
@@ -833,19 +907,29 @@ O7 & Evaluation (TLC) & FR-MOD-5, FR-ADM-5\\
 \appendix
 \chapter{Known Gaps and Open Issues}\label{app:gaps}
 These are acknowledged differences between this specification and the
-current build, to be resolved before the pilot.
+current build. The gaps listed in version 1.0 (verification gate, Row-Level
+Security, polling chat, undefined penalty tiers) have been closed.
 \begin{enumerate}
-  \item \textbf{Verification gate not enforced on actions.} The backend lets
-    any signed-in student create listings and chat; FR-LST-1 and BR-2 require
-    \texttt{id_verified = verified}. A guard on these endpoints is needed.
-  \item \textbf{Row-Level Security disabled} on all 13 tables (NFR-SEC-5).
-  \item \textbf{Chat uses polling} (4 s) instead of WebSockets (FR-CHT-10).
-  \item \textbf{Backend not yet deployed}; testing is limited to a shared
-    local network (NFR-SCL-2).
-  \item \textbf{Payment gateway not yet selected}; the escrow model assumes a
-    gateway with hold/release or split-payment support.
-  \item \textbf{Penalty tiers} for disputes must be defined before the
-    dispute module is built (proposal risk mitigation).
+  \item \textbf{Payment gateway not connected.} Payments are simulated
+    (FR-PAY-2). Before real money is used, a gateway with hold/release or
+    split payments must replace \texttt{pay}, \texttt{settle} and
+    \texttt{refund}.
+  \item \textbf{Backend not yet deployed}; testing is on a local network
+    (NFR-SEC-8, NFR-REL-1, NFR-SCL-2). On deployment, set
+    \texttt{CORS_ORIGINS} and \texttt{TRUST_PROXY} and serve over HTTPS.
+  \item \textbf{No load test yet} for NFR-PRF-1 and NFR-PRF-2.
+  \item \textbf{Phone push needs a development build}; in Expo Go,
+    notifications are in-app only.
+  \item \textbf{FR-AUTH-10 and FR-MOD-7 are not built}: no registrar list
+    and no AI moderation service is available. ID cards and listings are
+    checked by people.
+  \item \textbf{Deal steps are not one database transaction.} Each step undoes
+    its earlier writes if a later one fails, but a server crash between two
+    writes could leave a deal half-finished (NFR-REL-2).
+  \item \textbf{App library warning.} The Expo Router version in Expo SDK 57
+    uses a URL-decoding library with a known denial-of-service issue (a
+    crafted link could freeze the app). It is fixed in Expo SDK 58; upgrade
+    after the pilot.
 \end{enumerate}
 
 \end{document}

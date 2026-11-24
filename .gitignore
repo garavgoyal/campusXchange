@@ -6,3 +6,6 @@ build/
 *.log
 .DS_Store
 .expo/
+
+# TypeScript incremental state — machine-specific, never commit
+*.tsbuildinfo

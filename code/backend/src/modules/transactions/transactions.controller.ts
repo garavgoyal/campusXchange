@@ -10,11 +10,14 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
+import { UPLOAD_LIMIT } from '../../common/security/rate-limit.js';
+import { IMAGE_UPLOAD_OPTIONS } from '../../common/uploads/image-file.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { AdminGuard } from '../../common/guards/admin.guard.js';
 import { SupabaseAuthGuard, type AuthedUser } from '../../common/guards/supabase-auth.guard.js';
 import { VerifiedStudentGuard } from '../../common/guards/verified-student.guard.js';
-import { DisputesService } from './disputes.service.js';
+import { DisputesService, PENALTY_TIERS } from './disputes.service.js';
 import {
   CreateTransactionDto,
   PhotoStageDto,
@@ -72,8 +75,9 @@ export class TransactionsController {
 
   /** multipart/form-data: field "file" (image) + field "stage" (handoff | return). */
   @Post(':id/photos')
+  @Throttle(UPLOAD_LIMIT)
   @UseGuards(VerifiedStudentGuard)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', IMAGE_UPLOAD_OPTIONS))
   uploadPhoto(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PhotoStageDto,
@@ -119,6 +123,12 @@ export class AdminDisputesController {
   @Get()
   list() {
     return this.disputes.listOpen();
+  }
+
+  /** The fixed penalty tiers an admin can choose from. */
+  @Get('penalty-tiers')
+  penaltyTiers() {
+    return PENALTY_TIERS;
   }
 
   @Post(':id/review')

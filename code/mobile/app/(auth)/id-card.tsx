@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { Banner } from '../../src/components/ui/Banner';
 import { Button } from '../../src/components/ui/Button';
 import { ErrorText } from '../../src/components/ui/ErrorText';
 import { uploadIdCard } from '../../src/features/profile/api';
-import { colors, radius, typography } from '../../src/constants/colors';
+import { colors, radius, typography, fonts, shadow } from '../../src/constants/colors';
+import { Screen } from '../../src/components/ui/Screen';
 
 export default function IdCardScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -52,7 +52,7 @@ export default function IdCardScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <Screen style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Verify your student ID</Text>
         <Text style={styles.subtitle}>
@@ -102,15 +102,15 @@ export default function IdCardScreen() {
           <Text style={styles.skipText}>Skip for now</Text>
         </Pressable>
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   content: { padding: 20, paddingTop: 40, paddingBottom: 40 },
-  title: { fontSize: 24, fontWeight: '800', color: colors.text, marginBottom: 6 },
-  subtitle: { fontSize: 14, color: colors.textMuted, lineHeight: 20, marginBottom: 24 },
+  title: { fontSize: 24, fontFamily: fonts.displayBold, color: colors.text, marginBottom: 6 },
+  subtitle: { fontSize: 14, fontFamily: fonts.regular, color: colors.textMuted, lineHeight: 20, marginBottom: 24 },
   label: {
     ...typography.label,
     color: colors.textMuted,
@@ -136,23 +136,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 6,
   },
-  changeText: { fontSize: 12, fontWeight: '700', color: colors.text },
+  changeText: { fontSize: 12, fontFamily: fonts.bold, color: colors.text },
   placeholder: {
     height: 200,
     borderRadius: radius.card,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: colors.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 16, ...shadow.card,
   },
-  placeholderText: { color: colors.textFaint, fontSize: 13 },
+  placeholderText: { color: colors.textFaint, fontSize: 13, fontFamily: fonts.regular },
   actions: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   action: { flex: 1 },
   submit: { marginTop: 18 },
   skip: { marginTop: 16, alignItems: 'center' },
-  skipText: { color: colors.textMuted, fontSize: 14 },
+  skipText: { color: colors.textMuted, fontSize: 14, fontFamily: fonts.regular },
 });

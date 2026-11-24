@@ -1,5 +1,5 @@
 import { apiGet, apiSend } from '../../lib/apiClient';
-import type { IdVerificationItem, ModerationItem } from './types';
+import type { AdminStats, IdVerificationItem, ModerationItem } from './types';
 
 export async function fetchPendingListings(): Promise<ModerationItem[]> {
   return apiGet<ModerationItem[]>('/admin/moderation');
@@ -22,4 +22,8 @@ export async function decideIdVerification(
   decision: 'verified' | 'rejected',
 ) {
   return apiSend(`/admin/id-verifications/${userId}`, 'POST', { decision });
+}
+
+export async function fetchAdminStats(): Promise<AdminStats> {
+  return apiGet<AdminStats>('/admin/stats');
 }

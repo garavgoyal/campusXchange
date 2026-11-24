@@ -27,6 +27,13 @@ export class CreateTransactionDto {
   /** Lend only — refundable security deposit held alongside the rent. */
   @IsOptional() @IsNumber() @Min(0)
   deposit_amount?: number;
+
+  /**
+   * Where the handoff happens — a name from GET /campus/locations. Defaults to
+   * the listing's meeting point. Shown to the buyer before they pay.
+   */
+  @IsOptional() @IsString() @MaxLength(120)
+  meeting_location?: string;
 }
 
 export class ScanQrDto {
@@ -59,8 +66,9 @@ export class ResolveDisputeDto {
   @IsString() @MinLength(5) @MaxLength(1000)
   resolution: string;
 
-  @IsOptional() @IsNumber() @Min(0)
-  penalty_amount?: number;
+  /** A fixed tier (see PENALTY_TIERS in disputes.service.ts) — not a free amount. */
+  @IsOptional() @IsIn(['minor', 'moderate', 'severe'])
+  penalty_tier?: 'minor' | 'moderate' | 'severe';
 
   @IsOptional() @IsIn(['buyer', 'seller'])
   penalty_party?: 'buyer' | 'seller';

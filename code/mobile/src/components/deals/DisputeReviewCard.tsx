@@ -1,8 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '../ui/Button';
-import { colors, radius, typography } from '../../constants/colors';
-import type { AdminDispute, ConditionPhoto } from '../../features/transactions/types';
+import { colors, radius, typography, fonts, shadow } from '../../constants/colors';
+import { fetchPenaltyTiers } from '../../features/transactions/api';
+import type {
+  AdminDispute,
+  ConditionPhoto,
+  PenaltyRecord,
+  PenaltyTier,
+  PenaltyTierKey,
+} from '../../features/transactions/types';
 
 type Props = {
   item: AdminDispute;
@@ -11,7 +18,7 @@ type Props = {
   onResolve: (input: {
     outcome: 'release' | 'refund';
     resolution: string;
-    penalty_amount?: number;
+    penalty_tier?: PenaltyTierKey;
     penalty_party?: 'buyer' | 'seller';
   }) => void;
 };
@@ -33,6 +40,17 @@ function Photos({ title, photos }: { title: string; photos: ConditionPhoto[] }) 
   );
 }
 
+/** "Seller Garav · 2 earlier penalties (₹250)" — so repeat offenders stand out. */
+function Record({ who, record }: { who: string; record: PenaltyRecord | null }) {
+  if (!record) return null;
+  const has = record.penalties > 0;
+  return (
+    <Text style={[styles.record, has && styles.recordWarn]}>
+      {who} · {has ? `${record.penalties} earlier penalt${record.penalties === 1 ? 'y' : 'ies'} (₹${record.penalty_total})` : 'no earlier penalties'}
+    </Text>
+  );
+}
+
 /**
  * One dispute in the admin queue: the claim, the money held, and the
  * before/after condition photos side by side — the evidence the decision rests on.
@@ -41,22 +59,31 @@ export function DisputeReviewCard({ item, busy, onAskEvidence, onResolve }: Prop
   const deal = item.deal;
   const [note, setNote] = useState('');
   const [resolution, setResolution] = useState('');
-  const [penalty, setPenalty] = useState('');
+  const [tiers, setTiers] = useState<PenaltyTier[]>([]);
+  const [tier, setTier] = useState<PenaltyTierKey | null>(null);
   const [party, setParty] = useState<'buyer' | 'seller' | null>(null);
+
+  useEffect(() => {
+    fetchPenaltyTiers().then(setTiers).catch(() => setTiers([]));
+  }, []);
+  const chosen = tiers.find((t) => t.key === tier);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const handoff = deal?.photos.filter((p) => p.stage === 'handoff') ?? [];
+  // Usually the buyer paid; on an Exchange the listing owner may owe the top-up.
+  const sellerPaid = !!deal && deal.payer_id === deal.seller_id;
+  const payer = sellerPaid ? deal?.seller_name : deal?.buyer_name;
+  const payee = sellerPaid ? deal?.buyer_name : deal?.seller_name;
   const ret = deal?.photos.filter((p) => p.stage === 'return') ?? [];
 
   function resolve(outcome: 'release' | 'refund') {
     setLocalError(null);
     if (resolution.trim().length < 5) return setLocalError('Write a short reason for the decision');
-    const amount = penalty ? Number(penalty) : 0;
-    if (amount > 0 && !party) return setLocalError('Choose who the penalty applies to');
+    if (tier && !party) return setLocalError('Choose who the penalty applies to');
     onResolve({
       outcome,
       resolution: resolution.trim(),
-      ...(amount > 0 && party ? { penalty_amount: amount, penalty_party: party } : {}),
+      ...(tier && party ? { penalty_tier: tier, penalty_party: party } : {}),
     });
   }
 
@@ -71,6 +98,10 @@ export function DisputeReviewCard({ item, busy, onAskEvidence, onResolve }: Prop
         {deal?.escrow ? ` · escrow ₹${deal.escrow.amount} held` : ''}
       </Text>
       <Text style={styles.reason}>“{item.reason}”</Text>
+      <View style={styles.records}>
+        <Record who={`Buyer ${deal?.buyer_name ?? ''}`} record={item.buyer_record} />
+        <Record who={`Seller ${deal?.seller_name ?? ''}`} record={item.seller_record} />
+      </View>
       {item.admin_note ? <Text style={styles.muted}>You asked: {item.admin_note}</Text> : null}
 
       <View style={styles.photosWrap}>
@@ -108,27 +139,36 @@ export function DisputeReviewCard({ item, busy, onAskEvidence, onResolve }: Prop
         style={[styles.input, styles.multi]}
         multiline
       />
-      <View style={styles.inline}>
-        <TextInput
-          value={penalty}
-          onChangeText={(t) => setPenalty(t.replace(/[^0-9]/g, ''))}
-          placeholder="Penalty ₹ (optional)"
-          placeholderTextColor={colors.textFaint}
-          keyboardType="number-pad"
-          style={[styles.input, styles.flex]}
-        />
-        {(['buyer', 'seller'] as const).map((p) => (
-          <Pressable key={p} onPress={() => setParty(party === p ? null : p)} style={[styles.chip, party === p && styles.chipOn]}>
-            <Text style={[styles.chipText, party === p && styles.chipTextOn]}>{p}</Text>
+      <Text style={styles.label}>PENALTY (OPTIONAL)</Text>
+      <View style={styles.tierRow}>
+        <Pressable onPress={() => setTier(null)} style={[styles.chip, !tier && styles.chipNone]}>
+          <Text style={[styles.chipText, !tier && styles.chipTextOn]}>None</Text>
+        </Pressable>
+        {tiers.map((t) => (
+          <Pressable key={t.key} onPress={() => setTier(t.key)} style={[styles.chip, tier === t.key && styles.chipOn]}>
+            <Text style={[styles.chipText, tier === t.key && styles.chipTextOn]}>
+              {t.label} ₹{t.amount}
+            </Text>
           </Pressable>
         ))}
       </View>
+      {chosen ? <Text style={styles.muted}>For: {chosen.examples}</Text> : null}
+      {tier ? (
+        <View style={styles.inline}>
+          <Text style={styles.meta}>Applies to</Text>
+          {(['buyer', 'seller'] as const).map((p) => (
+            <Pressable key={p} onPress={() => setParty(p)} style={[styles.chip, party === p && styles.chipOn]}>
+              <Text style={[styles.chipText, party === p && styles.chipTextOn]}>{p}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       {localError ? <Text style={styles.error}>{localError}</Text> : null}
 
       <View style={styles.inline}>
-        <Button label="Refund buyer" variant="outline" loading={busy} onPress={() => resolve('refund')} style={styles.flex} />
-        <Button label="Release to seller" loading={busy} onPress={() => resolve('release')} style={styles.flex} />
+        <Button label={`Refund ${payer ?? 'payer'}`} variant="outline" loading={busy} onPress={() => resolve('refund')} style={styles.flex} />
+        <Button label={`Release to ${payee ?? 'payee'}`} loading={busy} onPress={() => resolve('release')} style={styles.flex} />
       </View>
     </View>
   );
@@ -137,20 +177,20 @@ export function DisputeReviewCard({ item, busy, onAskEvidence, onResolve }: Prop
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
     borderColor: colors.error,
     borderRadius: 14,
     padding: 14,
-    gap: 8,
+    gap: 8, ...shadow.card,
   },
-  title: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  meta: { color: colors.textMuted, fontSize: 12 },
-  reason: { color: colors.text, fontSize: 14, lineHeight: 20 },
-  muted: { color: colors.textMuted, fontSize: 12, fontStyle: 'italic' },
+  title: { color: colors.text, fontSize: 16, fontFamily: fonts.bold },
+  meta: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.regular },
+  reason: { color: colors.text, fontSize: 14, fontFamily: fonts.regular, lineHeight: 20 },
+  muted: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.regular, fontStyle: 'italic' },
   photosWrap: { gap: 10 },
   photoCol: { gap: 6 },
-  photoTitle: { fontSize: 12, fontWeight: '700', color: colors.text },
+  photoTitle: { fontSize: 12, fontFamily: fonts.bold, color: colors.text },
   photoRow: { gap: 8 },
   photo: { width: 110, height: 110, borderRadius: 10, backgroundColor: colors.surfaceSunk },
   label: { ...typography.label, color: colors.textMuted, marginTop: 4 },
@@ -161,7 +201,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.input,
     paddingHorizontal: 10,
-    fontSize: 13,
+    fontSize: 13, fontFamily: fonts.regular,
     color: colors.text,
     backgroundColor: colors.background,
   },
@@ -174,7 +214,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   chipOn: { backgroundColor: colors.error, borderColor: colors.error },
-  chipText: { fontSize: 12, color: colors.textMuted, fontWeight: '600', textTransform: 'capitalize' },
+  chipNone: { backgroundColor: colors.textMuted, borderColor: colors.textMuted },
+  tierRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  records: { gap: 2 },
+  record: { fontSize: 12, fontFamily: fonts.regular, color: colors.textMuted },
+  recordWarn: { color: colors.error, fontFamily: fonts.bold },
+  chipText: { fontSize: 12, color: colors.textMuted, fontFamily: fonts.semibold, textTransform: 'capitalize' },
   chipTextOn: { color: '#fff' },
-  error: { color: colors.error, fontSize: 12 },
+  error: { color: colors.error, fontSize: 12, fontFamily: fonts.regular },
 });

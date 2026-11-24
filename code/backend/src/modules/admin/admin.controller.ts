@@ -20,6 +20,12 @@ class IdDecisionDto {
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
+  /** Analytics: time-to-listing-clearance, queue depth, counts by status. */
+  @Get('stats')
+  stats() {
+    return this.adminService.stats();
+  }
+
   @Get('moderation')
   pendingListings() {
     return this.adminService.pendingListings();

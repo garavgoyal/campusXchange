@@ -11,4 +11,10 @@ export class UpdateProfileDto {
   @IsOptional()
   @Matches(/^\d{9,10}$/, { message: 'Roll number must be 9 or 10 digits' })
   roll_number?: string;
+
+  /** One of the hostel names from GET /campus/locations, or null to clear it. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  hostel?: string | null;
 }

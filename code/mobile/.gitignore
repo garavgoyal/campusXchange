@@ -42,3 +42,6 @@ yarn-error.*
 
 # local env
 .env
+
+# test run output
+test-results/

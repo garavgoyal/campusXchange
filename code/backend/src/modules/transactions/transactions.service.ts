@@ -7,7 +7,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { getSupabaseAdmin } from '../../database/supabase.client.js';
+import { campusDay } from '../../common/dates/campus-day.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { CampusService } from '../campus/campus.service.js';
+import { requireImage } from '../../common/uploads/image-file.js';
 import type { CreateTransactionDto } from './dto/transaction.dto.js';
 
 /**
@@ -41,7 +44,7 @@ type TxStatus =
 
 type Stage = 'handoff' | 'return';
 
-type TxRow = {
+export type TxRow = {
   id: string;
   listing_id: string;
   type: 'sell' | 'lend' | 'exchange';
@@ -52,13 +55,14 @@ type TxRow = {
   meeting_location: string | null;
   chat_id: string | null;
   offer_id: string | null;
+  payer_id: string | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
 };
 
-const TX_COLUMNS =
-  'id, listing_id, type, buyer_id, seller_id, agreed_price, status, meeting_location, chat_id, offer_id, created_at, updated_at, completed_at';
+export const TX_COLUMNS =
+  'id, listing_id, type, buyer_id, seller_id, agreed_price, status, meeting_location, chat_id, offer_id, payer_id, created_at, updated_at, completed_at';
 
 const ACTIVE: TxStatus[] = ['pending_payment', 'escrow_held', 'qr_issued', 'in_use', 'disputed'];
 const CANCELLABLE: TxStatus[] = ['pending_payment', 'escrow_held', 'qr_issued'];
@@ -79,12 +83,31 @@ function money(n: unknown): number {
   return Math.round(Number(n ?? 0) * 100) / 100;
 }
 
+/** Whole days between two YYYY-MM-DD dates; borrowing and returning the same day counts as one. */
+export function lendDays(start: string, end: string): number {
+  const ms = new Date(end.slice(0, 10)).getTime() - new Date(start.slice(0, 10)).getTime();
+  return Math.max(1, Math.round(ms / 86_400_000));
+}
+
+/** How many billing units a lend period covers: days, or started weeks. */
+export function lendUnits(days: number, unit: string | null): number {
+  return unit === 'week' ? Math.ceil(days / 7) : days;
+}
+
+/** Who pays into escrow. Sell and Lend: the buyer. Exchange: whoever owes the top-up. */
+export function payerOf(tx: { payer_id?: string | null; buyer_id: string }): string {
+  return tx.payer_id ?? tx.buyer_id;
+}
+
 @Injectable()
 export class TransactionsService {
   private readonly logger = new Logger(TransactionsService.name);
   private readonly photoBucket = process.env.SUPABASE_CONDITION_PHOTO_BUCKET ?? 'condition-photos';
 
-  constructor(private readonly notifications: NotificationsService) {}
+  constructor(
+    private readonly notifications: NotificationsService,
+    private readonly campus: CampusService,
+  ) {}
 
   // ===========================================================================
   // helpers
@@ -179,43 +202,69 @@ export class TransactionsService {
     return data;
   }
 
-  /** Escrow → seller. For a lend deal the deposit goes back to the borrower. */
-  async settle(tx: TxRow, mode: 'normal' | 'all_to_seller') {
+  /**
+   * Closes a held escrow in favour of the payee (the side that did NOT pay in).
+   * Sell / Lend: the seller or lender. Exchange: whoever is owed the top-up.
+   *
+   *   normal        payee gets everything except a lend deposit, which goes back to the payer
+   *   all_to_payee  payee gets everything (an admin found for them in a dispute)
+   *
+   * released_to_seller / refunded_to_buyer record how much ended up on each side.
+   * Throws if the write fails, so a deal is never reported settled when it isn't.
+   */
+  async settle(tx: TxRow, mode: 'normal' | 'all_to_payee') {
     const escrow = await this.escrowFor(tx.id);
     if (!escrow || escrow.status !== 'held') return;
 
     const total = money(escrow.amount);
     const lend = tx.type === 'lend' ? await this.lendFor(tx.id) : null;
     const deposit = mode === 'normal' ? money(lend?.deposit_amount) : 0;
+    const toPayee = money(total - deposit);
+    const sellerPaid = payerOf(tx) === tx.seller_id;
 
-    await getSupabaseAdmin()
+    const { data, error } = await getSupabaseAdmin()
       .from('escrow_holds')
       .update({
         status: 'released',
         released_at: new Date().toISOString(),
-        released_to_seller: money(total - deposit),
-        refunded_to_buyer: deposit,
+        released_to_seller: sellerPaid ? deposit : toPayee,
+        refunded_to_buyer: sellerPaid ? toPayee : deposit,
       })
       .eq('id', escrow.id)
-      .eq('status', 'held');
+      .eq('status', 'held')
+      .select('id')
+      .maybeSingle();
+    if (error) {
+      this.logger.error(`Escrow release failed for deal ${tx.id}: ${error.message}`);
+      throw new BadRequestException('Could not release the escrow — please try again');
+    }
+    if (!data) this.logger.warn(`Escrow for deal ${tx.id} was already closed`);
   }
 
-  /** Escrow → back to the buyer in full. */
-  async refund(txId: string) {
-    const escrow = await this.escrowFor(txId);
+  /** Escrow → back to whoever paid it in, in full. */
+  async refund(tx: TxRow) {
+    const escrow = await this.escrowFor(tx.id);
     if (!escrow || escrow.status !== 'held') return false;
 
-    await getSupabaseAdmin()
+    const amount = money(escrow.amount);
+    const sellerPaid = payerOf(tx) === tx.seller_id;
+    const { data, error } = await getSupabaseAdmin()
       .from('escrow_holds')
       .update({
         status: 'refunded',
         released_at: new Date().toISOString(),
-        released_to_seller: 0,
-        refunded_to_buyer: money(escrow.amount),
+        released_to_seller: sellerPaid ? amount : 0,
+        refunded_to_buyer: sellerPaid ? 0 : amount,
       })
       .eq('id', escrow.id)
-      .eq('status', 'held');
-    return true;
+      .eq('status', 'held')
+      .select('id')
+      .maybeSingle();
+    if (error) {
+      this.logger.error(`Escrow refund failed for deal ${tx.id}: ${error.message}`);
+      throw new BadRequestException('Could not refund the escrow — please try again');
+    }
+    return !!data;
   }
 
   private async signPhotos(rows: { image_url: string }[]) {
@@ -227,6 +276,17 @@ export class TransactionsService {
         return { ...row, url: data?.signedUrl ?? null };
       }),
     );
+  }
+
+  /** Has this person added at least one condition photo for this stage? */
+  private async hasPhoto(txId: string, stage: Stage, userId: string) {
+    const { count } = await getSupabaseAdmin()
+      .from('condition_photos')
+      .select('id', { count: 'exact', head: true })
+      .eq('transaction_id', txId)
+      .eq('stage', stage)
+      .eq('uploaded_by', userId);
+    return !!count;
   }
 
   async photosFor(txId: string) {
@@ -257,7 +317,7 @@ export class TransactionsService {
 
     const { data: listing } = await supabase
       .from('listings')
-      .select('id, owner_id, type, title, status, meeting_location')
+      .select('id, owner_id, type, title, status, meeting_location, rent_unit')
       .eq('id', chat.listing_id)
       .maybeSingle();
     if (!listing) throw new NotFoundException('Listing not found');
@@ -267,11 +327,24 @@ export class TransactionsService {
 
     const { data: offer } = await supabase
       .from('offers')
-      .select('id, offered_price, status')
+      .select('id, offered_price, status, item_title, topup_payer')
       .eq('chat_id', chat.id)
       .eq('status', 'accepted')
       .maybeSingle();
     if (!offer) throw new BadRequestException('Agree a price in the chat before finalising');
+
+    let agreedPrice = money(offer.offered_price);
+
+    // The meeting point is settled together with the deal. It must be a real
+    // campus place; the listing's own (possibly older) meeting point is always allowed.
+    let meetingPoint: string | null = (listing.meeting_location as string | null) ?? null;
+    if (dto.meeting_location !== undefined && dto.meeting_location.trim() !== meetingPoint) {
+      const wanted = dto.meeting_location.trim();
+      const place = (await this.campus.all()).find((p) => p.name === wanted);
+      if (!place) throw new BadRequestException('Choose a meeting point from the campus list');
+      meetingPoint = place.name;
+    }
+    if (!meetingPoint) throw new BadRequestException('Choose where you will meet');
 
     // Lend needs dates and a deposit before any money is held.
     let lendRow: Record<string, unknown> | null = null;
@@ -281,18 +354,30 @@ export class TransactionsService {
       }
       const start = new Date(dto.start_date);
       const end = new Date(dto.end_date);
-      const today = new Date(new Date().toISOString().slice(0, 10));
+      const today = new Date(campusDay());
       if (start < today) throw new BadRequestException('The start date cannot be in the past');
       if (end < start) throw new BadRequestException('The return date must be on or after the start date');
 
-      const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1);
+      // The agreed offer is a RATE (per day or per week, as listed); the deal
+      // stores the total rent for the whole period.
+      const days = lendDays(dto.start_date, dto.end_date);
+      const units = lendUnits(days, listing.rent_unit);
+      agreedPrice = money(Number(offer.offered_price) * units);
       lendRow = {
         start_date: dto.start_date.slice(0, 10),
         end_date: dto.end_date.slice(0, 10),
         deposit_amount: money(dto.deposit_amount ?? 0),
-        rent_per_day: money(Number(offer.offered_price) / days),
+        rent_per_day: money(agreedPrice / days),
       };
     }
+
+    // Exchange: the top-up can flow either way; nothing to pay for a straight swap.
+    let payerId: string = chat.initiator_id;
+    if (listing.type === 'exchange') {
+      if (!offer.item_title) throw new BadRequestException('Agree on the item being swapped before finalising');
+      payerId = offer.topup_payer === 'owner' ? chat.owner_id : chat.initiator_id;
+    }
+    const straightSwap = listing.type === 'exchange' && agreedPrice === 0;
 
     const { data: tx, error } = await supabase
       .from('transactions')
@@ -301,11 +386,12 @@ export class TransactionsService {
         type: listing.type,
         buyer_id: chat.initiator_id,
         seller_id: chat.owner_id,
-        agreed_price: offer.offered_price,
-        status: 'pending_payment',
-        meeting_location: listing.meeting_location,
+        agreed_price: agreedPrice,
+        status: straightSwap ? 'escrow_held' : 'pending_payment',
+        meeting_location: meetingPoint,
         chat_id: chat.id,
         offer_id: offer.id,
+        payer_id: payerId,
       })
       .select(TX_COLUMNS)
       .single();
@@ -342,9 +428,25 @@ export class TransactionsService {
       throw new BadRequestException('This listing was just reserved by another deal');
     }
 
+    // A straight swap has nothing to pay, so it goes straight to the meetup.
+    // A zero-amount hold keeps the escrow record consistent with every other deal.
+    if (straightSwap) {
+      await supabase.from('escrow_holds').insert({ transaction_id: tx.id, amount: 0, status: 'held' });
+    }
+
+    const body =
+      listing.type === 'exchange'
+        ? straightSwap
+          ? `Your swap for "${listing.title}" is confirmed. Meet at the campus point to hand both items over.`
+          : payerId === chat.initiator_id
+            ? `Your swap for "${listing.title}" is confirmed. Pay the ₹${agreedPrice} top-up into escrow to continue.`
+            : `Your swap for "${listing.title}" is confirmed. The owner will pay the ₹${agreedPrice} top-up into escrow.`
+        : listing.type === 'lend'
+          ? `"${listing.title}" is reserved for you: ₹${agreedPrice} rent for the period. Pay into escrow to continue.`
+          : `"${listing.title}" is reserved for you at ₹${agreedPrice}. Pay into escrow to continue.`;
     await this.notifications.notify(chat.initiator_id, 'deal_created', {
-      title: 'The seller chose you',
-      body: `"${listing.title}" is reserved for you at ₹${offer.offered_price}. Pay into escrow to continue.`,
+      title: listing.type === 'exchange' ? 'Swap confirmed' : 'The seller chose you',
+      body: `${body} Meeting point: ${meetingPoint}.`,
       transaction_id: tx.id,
       listing_id: listing.id,
     });
@@ -411,10 +513,10 @@ export class TransactionsService {
 
   async buildDetail(tx: TxRow, viewerId: string | null) {
     const supabase = getSupabaseAdmin();
-    const [listingRes, usersRes, escrow, lend, photos, disputeRes] = await Promise.all([
+    const [listingRes, usersRes, escrow, lend, photos, disputeRes, offerRes] = await Promise.all([
       supabase
         .from('listings')
-        .select('id, title, images, type, category, condition, status')
+        .select('id, title, images, type, category, condition, status, rent_amount, rent_unit')
         .eq('id', tx.listing_id)
         .maybeSingle(),
       supabase.from('users').select('id, name, email').in('id', [tx.buyer_id, tx.seller_id]),
@@ -426,6 +528,13 @@ export class TransactionsService {
         .select('id, raised_by, reason, status, admin_note, resolution, outcome, penalty_amount, penalty_user_id, created_at, resolved_at')
         .eq('transaction_id', tx.id)
         .maybeSingle(),
+      tx.offer_id
+        ? supabase
+            .from('offers')
+            .select('offered_price, item_title, item_description, item_images, topup_payer')
+            .eq('id', tx.offer_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
 
     const people = new Map((usersRes.data ?? []).map((u) => [u.id, u]));
@@ -437,9 +546,39 @@ export class TransactionsService {
 
     const stage = this.stageOf(tx);
     const roles = stage ? this.rolesFor(tx, stage) : null;
+    const offer = offerRes.data as {
+      offered_price: number;
+      item_title: string | null;
+      item_description: string | null;
+      item_images: string[] | null;
+      topup_payer: string | null;
+    } | null;
+    const payer = payerOf(tx);
+    const listingRow = listingRes.data as { rent_unit?: string | null } | null;
+    const stagePhotos = stage ? photos.filter((p) => (p as { stage?: string }).stage === stage) : [];
+    const photographed = (id: string | null) =>
+      !!id && stagePhotos.some((p) => (p as { uploaded_by?: string }).uploaded_by === id);
+    const otherParty = viewerId == null ? null : viewerId === tx.buyer_id ? tx.seller_id : tx.buyer_id;
 
     return {
       ...tx,
+      payer_id: payer,
+      /** true when the viewer is the one who pays into escrow. */
+      i_pay: viewerId === payer,
+      /** Exchange only — the item the other side put up for the swap. */
+      exchange_item:
+        tx.type === 'exchange' && offer?.item_title
+          ? {
+              title: offer.item_title,
+              description: offer.item_description,
+              images: offer.item_images ?? [],
+            }
+          : null,
+      /** Lend only — the agreed rate the total was worked out from. */
+      lend_rate:
+        tx.type === 'lend' && offer
+          ? { amount: money(offer.offered_price), unit: listingRow?.rent_unit ?? 'day' }
+          : null,
       my_role: viewerId == null ? null : tx.buyer_id === viewerId ? 'buyer' : 'seller',
       buyer_name: display(tx.buyer_id),
       seller_name: display(tx.seller_id),
@@ -453,6 +592,13 @@ export class TransactionsService {
       i_show_qr: !!roles && roles.giver === viewerId,
       /** true when the viewer is the one who must SCAN the QR right now. */
       i_scan_qr: !!roles && roles.receiver === viewerId,
+      /**
+       * Condition photos for the current stage. Each side must photograph the
+       * item before the QR can be shown or scanned.
+       */
+      photo_status: stage
+        ? { stage, mine: photographed(viewerId), theirs: photographed(otherParty) }
+        : null,
     };
   }
 
@@ -462,7 +608,9 @@ export class TransactionsService {
 
   async pay(txId: string, userId: string) {
     const tx = await this.loadForParty(txId, userId);
-    if (tx.buyer_id !== userId) throw new ForbiddenException('Only the buyer pays');
+    if (payerOf(tx) !== userId) {
+      throw new ForbiddenException(tx.type === 'exchange' ? 'The other side pays the top-up' : 'Only the buyer pays');
+    }
     if (tx.status !== 'pending_payment') throw new BadRequestException('This deal is not waiting for payment');
 
     const lend = tx.type === 'lend' ? await this.lendFor(tx.id) : null;
@@ -476,9 +624,13 @@ export class TransactionsService {
 
     const updated = await this.setStatus(tx, ['pending_payment'], 'escrow_held');
 
-    await this.notifications.notify(tx.seller_id, 'payment_held', {
+    const otherSide = userId === tx.buyer_id ? tx.seller_id : tx.buyer_id;
+    await this.notifications.notify(otherSide, 'payment_held', {
       title: 'Payment is in escrow',
-      body: `₹${amount} is held for "${await this.listingTitle(tx.listing_id)}". Meet the buyer and show your QR at handoff.`,
+      body:
+        tx.type === 'exchange'
+          ? `₹${amount} top-up is held for "${await this.listingTitle(tx.listing_id)}". Meet up and swap — the QR scan releases it.`
+          : `₹${amount} is held for "${await this.listingTitle(tx.listing_id)}". Meet the buyer and show your QR at handoff.`,
       transaction_id: tx.id,
     });
 
@@ -502,6 +654,12 @@ export class TransactionsService {
           ? 'The seller shows the QR at handoff — you scan it'
           : 'The borrower shows the QR at return — you scan it',
       );
+    }
+
+    // Photograph first, then show the code: the item's condition is on record
+    // from the side handing it over before anything is confirmed.
+    if (!(await this.hasPhoto(tx.id, stage, userId))) {
+      throw new BadRequestException('Add a condition photo of the item before showing your QR');
     }
 
     // Only one live code at a time: generating a new one kills the old.
@@ -539,16 +697,12 @@ export class TransactionsService {
       (stage === 'return' && tx.status === 'in_use');
     if (!allowed) throw new BadRequestException(`You can't add ${stage} photos at this stage of the deal`);
 
-    const extension = file.originalname?.split('.').pop()?.toLowerCase() || 'jpg';
-    const isImage =
-      file.mimetype?.startsWith('image/') || ['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp'].includes(extension);
-    if (!isImage) throw new BadRequestException('Condition photos must be images');
-    if (file.size > 8 * 1024 * 1024) throw new BadRequestException('Image is larger than 8 MB');
+    const image = requireImage(file, 'Condition photos');
 
     const supabase = getSupabaseAdmin();
-    const path = `${tx.id}/${stage}/${Date.now()}-${userId.slice(0, 8)}.${extension}`;
+    const path = `${tx.id}/${stage}/${Date.now()}-${userId.slice(0, 8)}.${image.ext}`;
     const { error: uploadError } = await supabase.storage.from(this.photoBucket).upload(path, file.buffer, {
-      contentType: file.mimetype?.startsWith('image/') ? file.mimetype : `image/${extension === 'jpg' ? 'jpeg' : extension}`,
+      contentType: image.mime,
       upsert: false,
     });
     if (uploadError) {
@@ -592,13 +746,9 @@ export class TransactionsService {
 
     const supabase = getSupabaseAdmin();
 
-    // Condition photos are mandatory before the scan (proposal Section 4.2).
-    const { count: photoCount } = await supabase
-      .from('condition_photos')
-      .select('id', { count: 'exact', head: true })
-      .eq('transaction_id', tx.id)
-      .eq('stage', stage);
-    if (!photoCount) {
+    // Condition photos are mandatory before the scan (proposal Section 4.2), and
+    // the person confirming must have taken their own — not rely on the other side's.
+    if (!(await this.hasPhoto(tx.id, stage, userId))) {
       throw new BadRequestException('Take at least one condition photo of the item before confirming');
     }
 
@@ -629,8 +779,36 @@ export class TransactionsService {
     const title = await this.listingTitle(tx.listing_id);
     const now = new Date().toISOString();
 
+    // If anything below fails, put the deal and the code back exactly as they
+    // were, so the people at the meetup can simply scan again.
+    const restoreToken = () =>
+      supabase.from('qr_tokens').update({ used: false, used_at: null }).eq('id', token.id);
+    const move = async (from: TxStatus[], to: TxStatus, extra: Record<string, unknown> = {}) => {
+      try {
+        return await this.setStatus(tx, from, to, extra);
+      } catch (e) {
+        await restoreToken();
+        throw e;
+      }
+    };
+    const moveAndSettle = async (from: TxStatus[]) => {
+      const updated = await move(from, 'completed', { completed_at: now });
+      try {
+        await this.settle(tx, 'normal');
+      } catch (e) {
+        await supabase
+          .from('transactions')
+          .update({ status: tx.status, completed_at: null, updated_at: new Date().toISOString() })
+          .eq('id', tx.id)
+          .eq('status', 'completed');
+        await restoreToken();
+        throw e;
+      }
+      return updated;
+    };
+
     if (stage === 'handoff' && tx.type === 'lend') {
-      const updated = await this.setStatus(tx, ['escrow_held', 'qr_issued'], 'in_use');
+      const updated = await move(['escrow_held', 'qr_issued'], 'in_use');
       await this.notifications.notifyMany([giver, receiver], 'handoff_complete', {
         title: 'Handoff confirmed',
         body: `"${title}" is now with the borrower. Escrow stays held until it is returned.`,
@@ -640,20 +818,24 @@ export class TransactionsService {
     }
 
     if (stage === 'handoff') {
-      const updated = await this.setStatus(tx, ['escrow_held', 'qr_issued'], 'completed', { completed_at: now });
-      await this.settle(tx, 'normal');
+      const updated = await moveAndSettle(['escrow_held', 'qr_issued']);
       await this.setListingStatus(tx.listing_id, 'completed');
+      const escrowLine =
+        tx.type !== 'exchange'
+          ? 'Escrow released to the seller.'
+          : Number(tx.agreed_price) > 0
+            ? 'Swap done and the top-up released.'
+            : 'Swap done.';
       await this.notifications.notifyMany([giver, receiver], 'handoff_complete', {
         title: 'Deal complete',
-        body: `Handoff of "${title}" confirmed. Escrow released to the seller.`,
+        body: `Handoff of "${title}" confirmed. ${escrowLine}`,
         transaction_id: tx.id,
       });
       return this.buildDetail(updated, userId);
     }
 
     // stage === 'return' (lend only)
-    const updated = await this.setStatus(tx, ['in_use'], 'completed', { completed_at: now });
-    await this.settle(tx, 'normal');
+    const updated = await moveAndSettle(['in_use']);
     // The lender has their item back, so it can be lent out again.
     await this.setListingStatus(tx.listing_id, 'live');
     await this.notifications.notifyMany([giver, receiver], 'item_returned', {
@@ -670,23 +852,7 @@ export class TransactionsService {
 
   async cancel(txId: string, userId: string) {
     const tx = await this.loadForParty(txId, userId);
-    if (!CANCELLABLE.includes(tx.status)) {
-      throw new BadRequestException('A deal can only be cancelled before the handoff');
-    }
-
-    // Move the deal first (the conditional update wins any race), then the money.
-    const escrow = await this.escrowFor(tx.id);
-    const paid = escrow?.status === 'held';
-    const updated = await this.setStatus(tx, CANCELLABLE, paid ? 'refunded' : 'cancelled');
-    const refunded = paid ? await this.refund(tx.id) : false;
-    await this.expireTokens(tx.id);
-
-    // Put the item back on the feed.
-    await getSupabaseAdmin()
-      .from('listings')
-      .update({ status: 'live' })
-      .eq('id', tx.listing_id)
-      .eq('status', 'reserved');
+    const { updated, refunded } = await this.closeBeforeHandoff(tx, true);
 
     const other = userId === tx.buyer_id ? tx.seller_id : tx.buyer_id;
     await this.notifications.notify(other, 'deal_cancelled', {
@@ -696,6 +862,79 @@ export class TransactionsService {
     });
 
     return this.buildDetail(updated, userId);
+  }
+
+  /** Deals on a listing that are still in progress (used when an admin takes it down). */
+  async activeDealsFor(listingId: string): Promise<TxRow[]> {
+    const { data, error } = await getSupabaseAdmin()
+      .from('transactions')
+      .select(TX_COLUMNS)
+      .eq('listing_id', listingId)
+      .in('status', ACTIVE);
+    if (error) throw new BadRequestException(error.message);
+    return (data ?? []) as TxRow[];
+  }
+
+  /** True when the deal has not reached the handoff, so it can still be called off. */
+  static canCloseBeforeHandoff(tx: TxRow): boolean {
+    return CANCELLABLE.includes(tx.status);
+  }
+
+  /**
+   * An admin took the listing down: call off a deal that has not reached the
+   * handoff and refund any money held. Both people are told why.
+   */
+  async cancelForTakedown(tx: TxRow, reason: string) {
+    const { refunded } = await this.closeBeforeHandoff(tx, false);
+    await this.notifications.notifyMany([tx.buyer_id, tx.seller_id], 'deal_cancelled', {
+      title: 'Deal cancelled by an admin',
+      body: `"${await this.listingTitle(tx.listing_id)}" was taken down (${reason}), so the deal was called off${refunded ? ' and the money refunded' : ''}.`,
+      transaction_id: tx.id,
+    });
+  }
+
+  /**
+   * Calls off a deal before the handoff: refunds any money held (or closes a
+   * ₹0 swap hold), kills the QR codes and, if `relist`, puts the item back live.
+   */
+  private async closeBeforeHandoff(tx: TxRow, relist: boolean) {
+    if (!CANCELLABLE.includes(tx.status)) {
+      throw new BadRequestException('A deal can only be cancelled before the handoff');
+    }
+
+    // Move the deal first (the conditional update wins any race), then the money.
+    const escrow = await this.escrowFor(tx.id);
+    const held = escrow?.status === 'held';
+    // A straight swap holds ₹0 — closing it is bookkeeping, not a refund.
+    const paid = held && Number(escrow?.amount ?? 0) > 0;
+    const updated = await this.setStatus(tx, CANCELLABLE, paid ? 'refunded' : 'cancelled');
+    let refunded = false;
+    if (held && !paid) await this.refund(tx).catch(() => undefined);
+    if (paid) {
+      try {
+        refunded = await this.refund(tx);
+      } catch (e) {
+        // Undo the status change so the deal doesn't read "refunded" with money still held.
+        await getSupabaseAdmin()
+          .from('transactions')
+          .update({ status: tx.status, updated_at: new Date().toISOString() })
+          .eq('id', tx.id)
+          .eq('status', 'refunded');
+        throw e;
+      }
+    }
+    await this.expireTokens(tx.id);
+
+    // Put the item back on the feed (a taken-down listing stays off: migration 011).
+    if (relist) {
+      await getSupabaseAdmin()
+        .from('listings')
+        .update({ status: 'live' })
+        .eq('id', tx.listing_id)
+        .eq('status', 'reserved');
+    }
+
+    return { updated, refunded };
   }
 
   // ===========================================================================

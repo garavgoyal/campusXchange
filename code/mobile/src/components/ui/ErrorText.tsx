@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { colors } from '../../constants/colors';
+import { colors, fonts } from '../../constants/colors';
 
 export function ErrorText({ children }: { children?: string | null }) {
   if (!children) return null;
@@ -8,5 +8,5 @@ export function ErrorText({ children }: { children?: string | null }) {
 }
 
 const styles = StyleSheet.create({
-  error: { color: colors.error, fontSize: 14, marginBottom: 12 },
+  error: { color: colors.error, fontSize: 14, fontFamily: fonts.regular, marginBottom: 12 },
 });

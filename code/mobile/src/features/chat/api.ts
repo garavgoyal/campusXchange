@@ -1,5 +1,5 @@
 import { apiGet, apiSend } from '../../lib/apiClient';
-import type { ChatMessage, ChatThread, Offer, ThreadEntry } from './types';
+import type { ChatMessage, ChatThread, Offer, OfferInput, ThreadEntry } from './types';
 
 export async function fetchChats(): Promise<ChatThread[]> {
   return apiGet<ChatThread[]>('/chats');
@@ -22,8 +22,8 @@ export async function fetchOffers(chatId: string): Promise<Offer[]> {
   return apiGet<Offer[]>(`/chats/${chatId}/offers`);
 }
 
-export async function sendOffer(chatId: string, price: number): Promise<Offer> {
-  return apiSend<Offer>(`/chats/${chatId}/offers`, 'POST', { offered_price: price });
+export async function sendOffer(chatId: string, input: OfferInput): Promise<Offer> {
+  return apiSend<Offer>(`/chats/${chatId}/offers`, 'POST', input);
 }
 
 export async function acceptOffer(offerId: string): Promise<Offer> {

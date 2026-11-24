@@ -11,7 +11,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { StatusBadge } from '../../src/components/listings/StatusBadge';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -20,7 +19,9 @@ import { SignInPrompt } from '../../src/components/ui/SignInPrompt';
 import { deleteListing, fetchMyListings } from '../../src/features/listings/api';
 import type { Listing } from '../../src/features/listings/types';
 import { useProfile } from '../../src/features/profile/hooks';
-import { colors, radius } from '../../src/constants/colors';
+import { colors, radius, fonts, shadow } from '../../src/constants/colors';
+import { Appear } from '../../src/components/ui/motion';
+import { Screen } from '../../src/components/ui/Screen';
 
 function priceLine(listing: Listing): string {
   if (listing.type === 'sell') return listing.price != null ? `₹${listing.price}` : 'Ask';
@@ -95,19 +96,19 @@ export default function MyListingsScreen() {
 
   if (!profileLoading && !isSignedIn) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <Screen style={styles.safe} edges={['top']}>
         <View style={styles.head}>
           <Text style={styles.screenTitle}>My listings</Text>
         </View>
         <View style={styles.centered}>
           <SignInPrompt action="see your listings" />
         </View>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <Screen style={styles.safe} edges={['top']}>
       <FlatList
         data={listings}
         keyExtractor={(item) => item.id}
@@ -128,8 +129,8 @@ export default function MyListingsScreen() {
             <ErrorText>{error}</ErrorText>
           </View>
         }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
+        renderItem={({ item, index }) => (
+          <Appear index={index} style={styles.card}>
             <Pressable
               style={styles.cardMain}
               onPress={() =>
@@ -149,8 +150,13 @@ export default function MyListingsScreen() {
                 </Text>
                 <Text style={styles.price}>{priceLine(item)}</Text>
                 <View style={styles.badgeRow}>
-                  <StatusBadge status={item.status} />
+                  <StatusBadge status={item.status} takenDown={!!item.taken_down_reason} />
                 </View>
+                {item.taken_down_reason ? (
+                  <Text style={styles.takenDown} numberOfLines={2}>
+                    Admin: {item.taken_down_reason}
+                  </Text>
+                ) : null}
               </View>
             </Pressable>
 
@@ -167,7 +173,7 @@ export default function MyListingsScreen() {
                 <Ionicons name="trash-outline" size={17} color={colors.error} />
               )}
             </Pressable>
-          </View>
+          </Appear>
         )}
         ListEmptyComponent={
           loading ? (
@@ -181,11 +187,12 @@ export default function MyListingsScreen() {
           )
         }
       />
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  takenDown: { color: colors.error, fontSize: 12, fontFamily: fonts.regular, marginTop: 4 },
   safe: { flex: 1, backgroundColor: colors.background },
   centered: { flex: 1, justifyContent: 'center' },
   content: { paddingHorizontal: 16, paddingBottom: 24 },
@@ -199,26 +206,26 @@ const styles = StyleSheet.create({
     borderRadius: radius.card,
     backgroundColor: colors.primaryTint,
   },
-  dealsLinkText: { flex: 1, color: colors.primary, fontSize: 13, fontWeight: '700' },
-  screenTitle: { fontSize: 24, fontWeight: '800', color: colors.text },
-  screenSub: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  dealsLinkText: { flex: 1, color: colors.primary, fontSize: 13, fontFamily: fonts.bold },
+  screenTitle: { fontSize: 28, fontFamily: fonts.displayBold, color: colors.text, letterSpacing: -0.6 },
+  screenSub: { fontSize: 13, fontFamily: fonts.regular, color: colors.textMuted, marginTop: 2 },
   sep: { height: 10 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.glassBorder,
     borderRadius: radius.card,
     padding: 10,
-    gap: 8,
+    gap: 8, ...shadow.card,
   },
   cardMain: { flex: 1, flexDirection: 'row', gap: 12, alignItems: 'center' },
   thumb: { width: 62, height: 62, borderRadius: 12, backgroundColor: colors.surfaceSunk },
   thumbEmpty: { alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1, gap: 3 },
-  title: { fontSize: 14, fontWeight: '700', color: colors.text },
-  price: { fontSize: 13, fontWeight: '700', color: colors.primary },
+  title: { fontSize: 14, fontFamily: fonts.bold, color: colors.text },
+  price: { fontSize: 13, fontFamily: fonts.bold, color: colors.primary },
   badgeRow: { flexDirection: 'row', marginTop: 2 },
   delete: {
     width: 38,

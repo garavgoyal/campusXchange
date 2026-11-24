@@ -10,16 +10,20 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
+import { HostelPicker } from '../../src/components/campus/HostelPicker';
 import { SignInPrompt } from '../../src/components/ui/SignInPrompt';
 import { signOut } from '../../src/features/auth/api';
+import { useCampusLocations } from '../../src/features/campus/hooks';
+import { unregisterPush } from '../../src/lib/push';
 import { fetchChats } from '../../src/features/chat/api';
 import { fetchMyListings } from '../../src/features/listings/api';
 import { updateProfile } from '../../src/features/profile/api';
 import { useProfile } from '../../src/features/profile/hooks';
-import { MEETING_LOCATIONS } from '../../src/constants/categories';
-import { colors, radius, typography } from '../../src/constants/colors';
+import { colors, radius, typography, fonts, shadow } from '../../src/constants/colors';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Appear } from '../../src/components/ui/motion';
+import { Screen } from '../../src/components/ui/Screen';
 
 type Counts = { total: number; live: number; chats: number };
 
@@ -30,6 +34,8 @@ export default function ProfileScreen() {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [pickingHostel, setPickingHostel] = useState(false);
+  const { spots } = useCampusLocations();
 
   useFocusEffect(
     useCallback(() => {
@@ -49,12 +55,12 @@ export default function ProfileScreen() {
 
   if (!loading && !isSignedIn) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <Screen style={styles.safe} edges={['top']}>
         <AppBar />
         <View style={styles.centered}>
           <SignInPrompt action="see your profile" />
         </View>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
@@ -73,13 +79,21 @@ export default function ProfileScreen() {
     setEditingName(false);
   }
 
+  async function saveHostel(hostel: string | null) {
+    const { error } = await updateProfile({ hostel });
+    if (error) throw new Error(error);
+    await reload();
+  }
+
   async function handleSignOut() {
+    // Stop this phone getting the account's notifications once signed out.
+    await unregisterPush();
     await signOut();
     router.replace('/(auth)/signup');
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <Screen style={styles.safe} edges={['top']}>
       <AppBar />
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -91,11 +105,16 @@ export default function ProfileScreen() {
         </View>
 
         {/* identity */}
-        <View style={styles.identityCard}>
+        <Appear style={styles.identityCard}>
           <View style={styles.avatarWrap}>
-            <View style={styles.avatar}>
+            <LinearGradient
+              colors={[colors.primarySoft, colors.primary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.avatar}
+            >
               <Text style={styles.avatarText}>{initial}</Text>
-            </View>
+            </LinearGradient>
             {verified ? (
               <View style={styles.avatarCheck}>
                 <Ionicons name="checkmark" size={12} color={colors.onBrand} />
@@ -169,14 +188,14 @@ export default function ProfileScreen() {
               </Text>
             </View>
           </View>
-        </View>
+        </Appear>
 
         {/* stats — real counts only */}
-        <View style={styles.stats}>
+        <Appear index={1} style={styles.stats}>
           <Stat value={counts?.total ?? '—'} label="Listings" />
           <Stat value={counts?.live ?? '—'} label="Live now" tone="primary" />
           <Stat value={counts?.chats ?? '—'} label="Chats" />
-        </View>
+        </Appear>
 
         {/* credentials */}
         <View style={styles.card}>
@@ -208,13 +227,19 @@ export default function ProfileScreen() {
             <View style={styles.subBody}>
               <Text style={styles.subLabel}>Student ID card</Text>
               <Text style={styles.subValue}>
-                {profile?.id_card_image_url ? 'Uploaded' : 'Not uploaded'}
+                {verified
+                  ? 'Checked by an admin'
+                  : status === 'rejected'
+                    ? 'Rejected: upload a clearer photo'
+                    : profile?.id_card_image_url
+                      ? 'Waiting for review'
+                      : 'Not uploaded'}
               </Text>
             </View>
             <Ionicons
-              name={verified ? 'checkmark-circle' : 'time-outline'}
+              name={verified ? 'checkmark-circle' : status === 'rejected' ? 'close-circle' : 'time-outline'}
               size={18}
-              color={verified ? colors.success : colors.warning}
+              color={verified ? colors.success : status === 'rejected' ? colors.error : colors.warning}
             />
           </View>
         </View>
@@ -222,18 +247,15 @@ export default function ProfileScreen() {
         {/* menu */}
         <View style={styles.card}>
           <MenuRow
-            icon="pricetags"
-            title="My listings"
-            subtitle="Edit or delete what you've posted"
-            badge={counts ? `${counts.live} live` : undefined}
-            onPress={() => router.push('/(tabs)/history')}
-          />
-          <View style={styles.divider} />
-          <MenuRow
-            icon="chatbubbles"
-            title="My chats"
-            subtitle="Ongoing negotiations"
-            onPress={() => router.push('/(tabs)/chats')}
+            icon="home"
+            title="Your hostel"
+            subtitle={
+              profile?.hostel
+                ? `${profile.hostel} · items nearest you show first`
+                : 'Not set · choose it to see what\'s nearest you'
+            }
+            badge={profile?.hostel ? 'Change' : 'Set'}
+            onPress={() => setPickingHostel(true)}
           />
           <View style={styles.divider} />
           <MenuRow
@@ -241,13 +263,6 @@ export default function ProfileScreen() {
             title="My deals"
             subtitle="Payments, QR handoffs, returns and disputes"
             onPress={() => router.push('/deals')}
-          />
-          <View style={styles.divider} />
-          <MenuRow
-            icon="notifications"
-            title="Notifications & alerts"
-            subtitle="Updates and new-item alerts by category"
-            onPress={() => router.push('/notifications')}
           />
           <View style={styles.divider} />
           <MenuRow
@@ -259,10 +274,10 @@ export default function ProfileScreen() {
           />
           {showZones ? (
             <View style={styles.zones}>
-              {MEETING_LOCATIONS.map((zone) => (
-                <View key={zone} style={styles.zone}>
+              {spots.map((zone) => (
+                <View key={zone.name} style={styles.zone}>
                   <Ionicons name="location-outline" size={11} color={colors.primary} />
-                  <Text style={styles.zoneText}>{zone}</Text>
+                  <Text style={styles.zoneText}>{zone.name}</Text>
                 </View>
               ))}
             </View>
@@ -277,7 +292,14 @@ export default function ProfileScreen() {
 
         <Text style={styles.footer}>CampusXchange · Thapar Institute of Eng. & Tech.</Text>
       </ScrollView>
-    </SafeAreaView>
+
+      <HostelPicker
+        visible={pickingHostel}
+        current={profile?.hostel ?? null}
+        onSelect={saveHostel}
+        onClose={() => setPickingHostel(false)}
+      />
+    </Screen>
   );
 }
 
@@ -361,31 +383,32 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   logo: { width: 28, height: 28, borderRadius: 8 },
-  brand: { flex: 1, fontSize: 16, fontWeight: '800', color: colors.text },
+  brand: { flex: 1, fontSize: 16, fontFamily: fonts.extrabold, color: colors.text },
   appBarTag: { ...typography.label, color: colors.textFaint, letterSpacing: 1.2 },
 
   titleRow: { paddingTop: 2, paddingBottom: 16 },
-  screenTitle: { fontSize: 24, fontWeight: '800', color: colors.text },
-  screenSub: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  screenTitle: { fontSize: 28, fontFamily: fonts.displayBold, color: colors.text, letterSpacing: -0.6 },
+  screenSub: { fontSize: 13, fontFamily: fonts.regular, color: colors.textMuted, marginTop: 2 },
 
   identityCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.glassBorder,
     borderRadius: radius.sheet,
     padding: 20,
-    alignItems: 'center',
+    alignItems: 'center', ...shadow.card,
   },
   avatarWrap: { marginBottom: 12 },
   avatar: {
     width: 82,
     height: 82,
     borderRadius: 41,
-    backgroundColor: colors.primaryTint,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: colors.glassBorder,
   },
-  avatarText: { fontSize: 32, fontWeight: '800', color: colors.primary },
+  avatarText: { fontSize: 34, fontFamily: fonts.displayBold, color: colors.onBrand },
   avatarCheck: {
     position: 'absolute',
     right: 2,
@@ -400,7 +423,7 @@ const styles = StyleSheet.create({
     borderColor: colors.surface,
   },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  name: { fontSize: 20, fontWeight: '800', color: colors.text },
+  name: { fontSize: 20, fontFamily: fonts.displayBold, color: colors.text },
   namePlaceholder: { color: colors.textFaint, fontStyle: 'italic' },
   nameEdit: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'stretch' },
   nameInput: {
@@ -412,7 +435,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 44,
     fontSize: 16,
-    fontWeight: '700',
+    fontFamily: fonts.bold,
     color: colors.text,
   },
   nameSave: {
@@ -424,7 +447,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   nameSaveOff: { opacity: 0.4 },
-  meta: { fontSize: 13, color: colors.textMuted, marginTop: 3 },
+  meta: { fontSize: 13, fontFamily: fonts.regular, color: colors.textMuted, marginTop: 3 },
   instRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
   pillRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
   pill: {
@@ -437,32 +460,32 @@ const styles = StyleSheet.create({
   },
   pillOk: { backgroundColor: colors.successTint },
   pillPending: { backgroundColor: colors.warningTint },
-  pillText: { fontSize: 12, fontWeight: '700' },
+  pillText: { fontSize: 12, fontFamily: fonts.bold },
   pillTextOk: { color: colors.success },
   pillTextPending: { color: colors.warning },
 
   stats: { flexDirection: 'row', gap: 10, marginTop: 12 },
   stat: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.glassBorder,
     borderRadius: radius.card,
     paddingVertical: 16,
     alignItems: 'center',
-    gap: 2,
+    gap: 2, ...shadow.card,
   },
-  statValue: { fontSize: 22, fontWeight: '800', color: colors.text },
+  statValue: { fontSize: 22, fontFamily: fonts.displayBold, color: colors.text },
   statValuePrimary: { color: colors.primary },
-  statLabel: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
+  statLabel: { fontSize: 11, color: colors.textMuted, fontFamily: fonts.semibold },
 
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.glassBorder,
     borderRadius: radius.sheet,
     padding: 14,
-    marginTop: 12,
+    marginTop: 12, ...shadow.card,
   },
   cardHead: {
     flexDirection: 'row',
@@ -479,14 +502,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardTitle: { fontSize: 14, fontWeight: '800', color: colors.text },
+  cardTitle: { fontSize: 14, fontFamily: fonts.extrabold, color: colors.text },
   activePill: {
     backgroundColor: colors.primaryTint,
     borderRadius: radius.chip,
     paddingHorizontal: 9,
     paddingVertical: 3,
   },
-  activeText: { fontSize: 10, fontWeight: '800', color: colors.primary, letterSpacing: 0.6 },
+  activeText: { fontSize: 10, fontFamily: fonts.extrabold, color: colors.primary, letterSpacing: 0.6 },
 
   subRow: {
     flexDirection: 'row',
@@ -498,8 +521,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   subBody: { flex: 1, gap: 1 },
-  subLabel: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
-  subValue: { fontSize: 13, color: colors.text, fontWeight: '600' },
+  subLabel: { fontSize: 11, color: colors.textMuted, fontFamily: fonts.semibold },
+  subValue: { fontSize: 13, color: colors.text, fontFamily: fonts.semibold },
 
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
   pressed: { opacity: 0.6 },
@@ -512,15 +535,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   menuBody: { flex: 1, gap: 1 },
-  menuTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
-  menuSub: { fontSize: 12, color: colors.textMuted },
+  menuTitle: { fontSize: 14, fontFamily: fonts.bold, color: colors.text },
+  menuSub: { fontSize: 12, fontFamily: fonts.regular, color: colors.textMuted },
   badge: {
     backgroundColor: colors.accentTint,
     borderRadius: radius.chip,
     paddingHorizontal: 9,
     paddingVertical: 3,
   },
-  badgeText: { fontSize: 11, fontWeight: '700', color: colors.accent },
+  badgeText: { fontSize: 11, fontFamily: fonts.bold, color: colors.accent },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: 10 },
 
   zones: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 12 },
@@ -533,7 +556,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  zoneText: { fontSize: 11, color: colors.textMuted, fontWeight: '500' },
+  zoneText: { fontSize: 11, color: colors.textMuted, fontFamily: fonts.medium },
 
   logoutCard: {
     flexDirection: 'row',
@@ -543,10 +566,10 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingVertical: 16,
     borderRadius: radius.sheet,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.glassBorder, ...shadow.card,
   },
-  logoutText: { color: colors.error, fontSize: 14, fontWeight: '700' },
-  footer: { textAlign: 'center', color: colors.textFaint, fontSize: 11, marginTop: 18 },
+  logoutText: { color: colors.error, fontSize: 14, fontFamily: fonts.bold },
+  footer: { textAlign: 'center', color: colors.textFaint, fontSize: 11, fontFamily: fonts.regular, marginTop: 18 },
 });

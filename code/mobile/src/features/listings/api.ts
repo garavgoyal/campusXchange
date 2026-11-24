@@ -1,12 +1,16 @@
 import { File } from 'expo-file-system';
-import { API_URL, apiGet, apiSend, authHeaders } from '../../lib/apiClient';
+import { API_URL, apiGet, apiSend, authHeaders, errorMessage } from '../../lib/apiClient';
 import type { CreateListingInput, Listing, ListingQuery } from './types';
 
+export const FEED_PAGE_SIZE = 20;
+
 /** Public — works signed out, but the backend withholds meeting_location for guests. */
-export async function fetchListings(query: ListingQuery): Promise<Listing[]> {
-  const params = new URLSearchParams({ type: query.type });
+export async function fetchListings(query: ListingQuery, offset = 0): Promise<Listing[]> {
+  const params = new URLSearchParams({ type: query.type, limit: String(FEED_PAGE_SIZE) });
+  if (offset) params.set('offset', String(offset));
   if (query.category) params.set('category', query.category);
   if (query.search) params.set('search', query.search);
+  if (query.sort === 'nearest') params.set('sort', 'nearest');
   return apiGet<Listing[]>(`/listings?${params.toString()}`);
 }
 
@@ -43,7 +47,7 @@ export async function uploadListingImage(fileUri: string): Promise<string> {
     body: form,
   });
 
-  if (!res.ok) throw new Error((await res.text()) || `Upload failed (${res.status})`);
+  if (!res.ok) throw new Error(await errorMessage(res));
   const { url } = (await res.json()) as { url: string };
   return url;
 }
@@ -58,6 +62,21 @@ export async function deleteListing(id: string): Promise<{ deleted: boolean }> {
     method: 'DELETE',
     headers: await authHeaders(),
   });
-  if (!res.ok) throw new Error((await res.text()) || `Could not delete (${res.status})`);
+  if (!res.ok) throw new Error(await errorMessage(res));
   return (await res.json()) as { deleted: boolean };
+}
+
+/** Owner edits a listing. It goes back to pending_review until an admin approves it again. */
+export async function updateListing(id: string, input: Partial<CreateListingInput>): Promise<Listing> {
+  return apiSend<Listing>(`/listings/${id}`, 'PATCH', input);
+}
+
+/** Photos already on the server are kept as-is; only new local ones are uploaded. */
+export async function uploadNewPhotos(uris: string[]): Promise<string[]> {
+  return Promise.all(uris.map((u) => (/^https?:\/\//.test(u) ? Promise.resolve(u) : uploadListingImage(u))));
+}
+
+/** Exchange only: other students' live items that fit what this listing wants. */
+export async function fetchExchangeMatches(id: string): Promise<(Listing & { matched_tags: string[] })[]> {
+  return apiGet<(Listing & { matched_tags: string[] })[]>(`/listings/${id}/matches`);
 }

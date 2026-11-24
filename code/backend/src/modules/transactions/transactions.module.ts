@@ -6,5 +6,6 @@ import { TransactionsService } from './transactions.service.js';
 @Module({
   controllers: [TransactionsController, AdminDisputesController],
   providers: [TransactionsService, DisputesService],
+  exports: [TransactionsService],
 })
 export class TransactionsModule {}

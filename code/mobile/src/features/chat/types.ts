@@ -12,9 +12,24 @@ export type Offer = {
   id: string;
   chat_id: string;
   sender_id: string | null;
+  /** Sell: the price · Lend: the rate per day/week · Exchange: the cash top-up (0 = straight swap). */
   offered_price: number;
   status: OfferStatus;
   created_at: string;
+  /** Exchange only — the item the person asking to swap is putting up. */
+  item_title?: string | null;
+  item_description?: string | null;
+  item_images?: string[] | null;
+  /** Exchange only — who adds the top-up: the chat initiator or the listing owner. */
+  topup_payer?: 'initiator' | 'owner' | null;
+};
+
+export type OfferInput = {
+  offered_price: number;
+  item_title?: string;
+  item_description?: string;
+  item_images?: string[];
+  topup_payer?: 'initiator' | 'owner';
 };
 
 /** Messages and offers merged into one timeline, ordered by time. */
