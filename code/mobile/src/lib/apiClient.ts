@@ -8,8 +8,9 @@ export async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** Pulls the readable message out of a Nest error body. */
-async function errorMessage(res: Response): Promise<string> {
+/** Pulls the readable message out of a Nest error body ("Image is larger than 8 MB"). */
+export async function errorMessage(res: Response): Promise<string> {
+  if (res.status === 413) return 'That photo is larger than 8 MB. Pick a smaller one.';
   try {
     const body = await res.json();
     const message = (body as { message?: string | string[] }).message;
@@ -29,7 +30,7 @@ export async function apiGet<T>(path: string): Promise<T> {
 
 export async function apiSend<T>(
   path: string,
-  method: 'POST' | 'PATCH' | 'PUT',
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   body?: unknown,
 ): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {

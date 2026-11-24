@@ -1,13 +1,14 @@
 import React, { useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Button } from '../../src/components/ui/Button';
 import { ErrorText } from '../../src/components/ui/ErrorText';
-import { colors, radius } from '../../src/constants/colors';
+import { colors, radius, fonts } from '../../src/constants/colors';
 import { scanQr } from '../../src/features/transactions/api';
+import { BackButton } from '../../src/components/ui/BackButton';
+import { Screen } from '../../src/components/ui/Screen';
 
 /**
  * The person RECEIVING the item scans the QR shown by the person handing it
@@ -50,11 +51,9 @@ export default function ScanScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <Screen style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
-        </Pressable>
+        <BackButton />
         <Text style={styles.headerTitle}>Scan QR</Text>
       </View>
 
@@ -107,16 +106,16 @@ export default function ScanScreen() {
           />
         </View>
       </View>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingTop: 4, paddingBottom: 10 },
+  headerTitle: { fontSize: 19, fontFamily: fonts.displayBold, color: colors.text, letterSpacing: -0.2 },
   content: { padding: 16, gap: 14 },
-  sub: { fontSize: 13, color: colors.textMuted, textAlign: 'center' },
+  sub: { fontSize: 13, fontFamily: fonts.regular, color: colors.textMuted, textAlign: 'center' },
   cameraBox: {
     height: 320,
     borderRadius: radius.sheet,
@@ -145,7 +144,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     opacity: 0.85,
   },
-  or: { fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+  or: { fontSize: 12, fontFamily: fonts.regular, color: colors.textMuted, textAlign: 'center' },
   manualRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   input: {
     flex: 1,
@@ -156,7 +155,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     fontSize: 17,
     letterSpacing: 3,
-    fontWeight: '700',
+    fontFamily: fonts.bold,
     color: colors.text,
     backgroundColor: colors.surface,
   },

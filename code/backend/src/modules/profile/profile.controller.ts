@@ -9,6 +9,9 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
+import { UPLOAD_LIMIT } from '../../common/security/rate-limit.js';
+import { IMAGE_UPLOAD_OPTIONS } from '../../common/uploads/image-file.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { SupabaseAuthGuard, type AuthedUser } from '../../common/guards/supabase-auth.guard.js';
 import { ProfileService } from './profile.service.js';
@@ -22,7 +25,8 @@ export class ProfileController {
 
   /** POST /profile/id-card — multipart form field name: "file" */
   @Post('id-card')
-  @UseInterceptors(FileInterceptor('file'))
+  @Throttle(UPLOAD_LIMIT)
+  @UseInterceptors(FileInterceptor('file', IMAGE_UPLOAD_OPTIONS))
   async uploadIdCard(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: AuthedUser,

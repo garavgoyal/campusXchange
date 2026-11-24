@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors } from '../../constants/colors';
+import { colors, fonts } from '../../constants/colors';
 import { STATUS_LABEL, type TransactionStatus } from '../../features/transactions/types';
 
 const TONE: Record<TransactionStatus, { fg: string; bg: string }> = {
@@ -25,5 +25,5 @@ export function DealStatusPill({ status }: { status: TransactionStatus }) {
 
 const styles = StyleSheet.create({
   pill: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  text: { fontSize: 11, fontWeight: '700' },
+  text: { fontSize: 11, fontFamily: fonts.bold },
 });

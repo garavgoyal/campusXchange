@@ -2,7 +2,7 @@ import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { colors } from '../../constants/colors';
+import { colors, fonts, shadow } from '../../constants/colors';
 
 type Props = {
   uris: string[];
@@ -106,12 +106,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: colors.glassBorder,
+    backgroundColor: colors.glass,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
+    gap: 3, ...shadow.card,
   },
-  addText: { color: colors.primary, fontSize: 11, fontWeight: '600' },
-  hint: { color: colors.textMuted, fontSize: 12 },
+  addText: { color: colors.primary, fontSize: 11, fontFamily: fonts.semibold },
+  hint: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.regular },
 });

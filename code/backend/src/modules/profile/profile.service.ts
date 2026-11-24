@@ -1,25 +1,18 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { getSupabaseAdmin } from '../../database/supabase.client.js';
+import { CampusService } from '../campus/campus.service.js';
+import { requireImage } from '../../common/uploads/image-file.js';
+
+const ROLL_TAKEN =
+  'This roll number is already registered to another account. Check it, or contact an admin if it is yours.';
 import type { ProfileMeDto, UploadIdCardResponseDto } from './dto/upload-id-card.dto.js';
-
-const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp'];
-const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
-
-/**
- * Accept anything the client labels as an image. Some clients send no content-type
- * at all (it arrives as application/octet-stream), so fall back to the file
- * extension rather than rejecting a perfectly good photo.
- */
-function isAcceptableImage(file: Express.Multer.File): boolean {
-  if (file.mimetype?.startsWith('image/')) return true;
-  const extension = file.originalname?.split('.').pop()?.toLowerCase() ?? '';
-  return ALLOWED_EXTENSIONS.includes(extension);
-}
 
 @Injectable()
 export class ProfileService {
   private readonly logger = new Logger(ProfileService.name);
   private readonly bucket = process.env.SUPABASE_ID_CARD_BUCKET ?? 'id-cards';
+
+  constructor(private readonly campus: CampusService) {}
 
   /**
    * Stores the student's ID card photo in the private `id-cards` bucket and
@@ -29,31 +22,16 @@ export class ProfileService {
     userId: string,
     file?: Express.Multer.File,
   ): Promise<UploadIdCardResponseDto> {
-    if (!file) throw new BadRequestException('No file provided');
-
-    if (!isAcceptableImage(file)) {
-      throw new BadRequestException(
-        `Unsupported file type: ${file.mimetype}. Upload a JPEG or PNG image.`,
-      );
-    }
-
-    if (file.size > MAX_BYTES) {
-      throw new BadRequestException('Image is larger than 8 MB');
-    }
+    // Type and extension come from the file's bytes, not from what the client claims.
+    const image = requireImage(file, 'ID card photos');
 
     const supabase = getSupabaseAdmin();
-    const extension = file.originalname.split('.').pop()?.toLowerCase() || 'jpg';
     // Namespaced by user id so one student can never overwrite another's file.
-    const path = `${userId}/${Date.now()}.${extension}`;
+    const path = `${userId}/${Date.now()}.${image.ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from(this.bucket)
-      .upload(path, file.buffer, {
-        contentType: file.mimetype?.startsWith('image/')
-          ? file.mimetype
-          : `image/${extension === 'jpg' ? 'jpeg' : extension}`,
-        upsert: false,
-      });
+      .upload(path, file!.buffer, { contentType: image.mime, upsert: false });
 
     if (uploadError) {
       this.logger.error(`Storage upload failed for ${userId}: ${uploadError.message}`);
@@ -73,11 +51,40 @@ export class ProfileService {
     return { ok: true, path, id_verified: 'pending' };
   }
 
-  /** Saves the profile fields collected at signup (name, roll number). */
-  async updateProfile(userId: string, patch: { name?: string; roll_number?: string }) {
-    const update: Record<string, string> = {};
+  /**
+   * Saves profile fields: name and roll number (collected at signup) and the
+   * student's hostel (chosen or changed any time on the Profile screen).
+   * The hostel must be one of the real hostels in campus_locations; there is
+   * nothing else to verify, because it only changes the order of your own feed.
+   */
+  async updateProfile(
+    userId: string,
+    patch: { name?: string; roll_number?: string; hostel?: string | null },
+  ) {
+    const update: Record<string, string | null> = {};
     if (patch.name !== undefined) update.name = patch.name.trim();
-    if (patch.roll_number !== undefined) update.roll_number = patch.roll_number;
+    if (patch.roll_number !== undefined) {
+      const roll = patch.roll_number.trim();
+      // One account per roll number (migration 010 enforces it in the database too).
+      const { data: taken } = await getSupabaseAdmin()
+        .from('users')
+        .select('id')
+        .eq('roll_number', roll)
+        .neq('id', userId)
+        .limit(1)
+        .maybeSingle();
+      if (taken) throw new BadRequestException(ROLL_TAKEN);
+      update.roll_number = roll;
+    }
+    if (patch.hostel !== undefined) {
+      if (patch.hostel === null || patch.hostel === '') {
+        update.hostel = null;
+      } else {
+        const hostel = await this.campus.hostel(patch.hostel);
+        if (!hostel) throw new BadRequestException('Choose a hostel from the list');
+        update.hostel = hostel.name;
+      }
+    }
 
     if (Object.keys(update).length === 0) {
       throw new BadRequestException('Nothing to update');
@@ -87,10 +94,12 @@ export class ProfileService {
       .from('users')
       .update(update)
       .eq('id', userId)
-      .select('id, name, roll_number')
+      .select('id, name, roll_number, hostel')
       .single();
 
     if (error || !data) {
+      // 23505 = unique index (two people saving the same roll number at once).
+      if (error?.code === '23505') throw new BadRequestException(ROLL_TAKEN);
       this.logger.error(`Profile update failed for ${userId}: ${error?.message}`);
       throw new BadRequestException('Could not save your profile');
     }
@@ -105,7 +114,7 @@ export class ProfileService {
   async getMe(userId: string): Promise<ProfileMeDto> {
     const { data, error } = await getSupabaseAdmin()
       .from('users')
-      .select('id, name, email, roll_number, id_card_image_url, id_verified, role')
+      .select('id, name, email, roll_number, id_card_image_url, id_verified, role, hostel')
       .eq('id', userId)
       .single();
 

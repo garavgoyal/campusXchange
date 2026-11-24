@@ -64,7 +64,7 @@ export class ChatController {
     @Body() dto: CreateOfferDto,
     @CurrentUser() user: AuthedUser,
   ) {
-    return this.offersService.createOffer(chatId, user.id, dto.offered_price);
+    return this.offersService.createOffer(chatId, user.id, dto);
   }
 
   @Post('offers/:offerId/accept')

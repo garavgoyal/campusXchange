@@ -14,4 +14,6 @@ export class ProfileMeDto {
   id_card_image_url: string | null;
   id_verified: 'pending' | 'verified' | 'rejected';
   role: 'student' | 'admin';
+  /** Where the student lives; orders the feed by nearest meeting point. */
+  hostel: string | null;
 }

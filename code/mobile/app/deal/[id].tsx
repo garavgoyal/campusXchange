@@ -4,23 +4,22 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
 import { ConditionPhotos } from '../../src/components/deals/ConditionPhotos';
+import { PhotoGallery } from '../../src/components/listings/PhotoGallery';
 import { DealStatusPill } from '../../src/components/deals/DealStatusPill';
 import { Banner } from '../../src/components/ui/Banner';
 import { Button } from '../../src/components/ui/Button';
 import { ErrorText } from '../../src/components/ui/ErrorText';
-import { colors, radius, typography } from '../../src/constants/colors';
+import { colors, radius, typography, fonts, shadow } from '../../src/constants/colors';
 import { useRealtimeRefresh } from '../../src/lib/realtime';
 import {
   cancelDeal,
@@ -30,6 +29,9 @@ import {
   raiseDispute,
 } from '../../src/features/transactions/api';
 import type { Deal, QrTicket } from '../../src/features/transactions/types';
+import { BackButton } from '../../src/components/ui/BackButton';
+import { StepTracker } from '../../src/components/deals/StepTracker';
+import { Screen } from '../../src/components/ui/Screen';
 
 const FALLBACK_POLL_MS = 15000;
 
@@ -41,6 +43,28 @@ function rupees(n: number | null | undefined) {
 function nextStep(deal: Deal): string {
   const buyer = deal.my_role === 'buyer';
   const lend = deal.type === 'lend';
+  if (deal.type === 'exchange') {
+    const topup = Number(deal.agreed_price);
+    switch (deal.status) {
+      case 'pending_payment':
+        return deal.i_pay
+          ? `Pay the ₹${topup} top-up into escrow. It is released only after the swap is confirmed.`
+          : `Waiting for the other side to pay the ₹${topup} top-up into escrow.`;
+      case 'escrow_held':
+      case 'qr_issued':
+        return deal.i_show_qr
+          ? 'Meet at the campus point and swap items. After they check yours, show your QR for them to scan.'
+          : 'Meet at the campus point and swap items. Check theirs, photograph it, then scan their QR to confirm.';
+      case 'completed':
+        return topup > 0 ? 'Swap done. The top-up was released.' : 'Swap done.';
+      case 'refunded':
+        return 'This swap was called off and the top-up refunded.';
+      case 'cancelled':
+        return 'This swap was cancelled.';
+      case 'disputed':
+        return 'An admin is reviewing this swap. Any top-up stays frozen. Add photos that support your side.';
+    }
+  }
   switch (deal.status) {
     case 'pending_payment':
       return buyer
@@ -129,7 +153,9 @@ export default function DealScreen() {
     const total = Number(deal.agreed_price) + Number(deal.lend?.deposit_amount ?? 0);
     Alert.alert(
       `Pay ${rupees(total)} into escrow?`,
-      'Simulated payment for the pilot — no real money moves. It is held until you confirm the handoff.',
+      deal.type === 'exchange'
+        ? 'Simulated payment for the pilot — no real money moves. The top-up is held until the swap is confirmed.'
+        : 'Simulated payment for the pilot — no real money moves. It is held until you confirm the handoff.',
       [
         { text: 'Not yet', style: 'cancel' },
         { text: 'Pay', onPress: () => run('pay', () => payDeal(deal.id)) },
@@ -141,8 +167,8 @@ export default function DealScreen() {
     if (!deal) return;
     Alert.alert(
       'Cancel this deal?',
-      deal.escrow?.status === 'held'
-        ? 'The escrow will be refunded to the buyer and the item goes back on the feed.'
+      deal.escrow?.status === 'held' && Number(deal.escrow.amount) > 0
+        ? 'The escrow will be refunded to whoever paid it and the item goes back on the feed.'
         : 'The item goes back on the feed.',
       [
         { text: 'Keep deal', style: 'cancel' },
@@ -178,25 +204,27 @@ export default function DealScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <Screen style={styles.safe}>
         <ActivityIndicator color={colors.primary} style={styles.loader} />
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   if (!deal) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <Screen style={styles.safe}>
         <View style={styles.content}>
           <ErrorText>{error ?? 'Deal not found'}</ErrorText>
           <Button label="Go back" variant="outline" onPress={() => router.back()} />
         </View>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   const buyer = deal.my_role === 'buyer';
   const lend = deal.type === 'lend';
+  const exchange = deal.type === 'exchange';
+  const payerName = deal.payer_id === deal.seller_id ? deal.seller_name : deal.buyer_name;
   const counterparty = buyer ? deal.seller_name : deal.buyer_name;
   const roleLine = lend
     ? buyer ? `Borrowing from ${counterparty}` : `Lending to ${counterparty}`
@@ -206,7 +234,6 @@ export default function DealScreen() {
 
   const deposit = Number(deal.lend?.deposit_amount ?? 0);
   const total = Number(deal.agreed_price) + deposit;
-  const stagePhotos = deal.stage ? deal.photos.filter((p) => p.stage === deal.stage) : [];
   const cancellable = ['pending_payment', 'escrow_held', 'qr_issued'].includes(deal.status);
   const disputable = ['escrow_held', 'qr_issued', 'in_use'].includes(deal.status);
   const disputed = deal.status === 'disputed';
@@ -214,7 +241,9 @@ export default function DealScreen() {
 
   const steps = lend
     ? ['Agreed', 'Paid', 'Handed over', 'Returned']
-    : ['Agreed', 'Paid', 'Handed over'];
+    : exchange
+      ? ['Agreed', Number(deal.agreed_price) > 0 ? 'Top-up paid' : 'Confirmed', 'Swapped']
+      : ['Agreed', 'Paid', 'Handed over'];
   const reached =
     deal.status === 'pending_payment' ? 0
     : deal.status === 'escrow_held' || deal.status === 'qr_issued' ? 1
@@ -223,11 +252,9 @@ export default function DealScreen() {
     : -1;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <Screen style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
-        </Pressable>
+        <BackButton />
         <Text style={styles.headerTitle}>Deal</Text>
       </View>
 
@@ -256,26 +283,38 @@ export default function DealScreen() {
             </View>
           </View>
 
-          {reached >= 0 ? (
-            <View style={styles.steps}>
-              {steps.map((label, i) => (
-                <View key={label} style={styles.step}>
-                  <View style={[styles.dot, i <= reached && styles.dotOn]}>
-                    {i <= reached ? <Ionicons name="checkmark" size={11} color="#fff" /> : null}
-                  </View>
-                  <Text style={[styles.stepText, i <= reached && styles.stepTextOn]}>{label}</Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
+          {reached >= 0 ? <StepTracker steps={steps} reached={reached} /> : null}
 
           <Text style={styles.next}>{nextStep(deal)}</Text>
         </View>
 
+        {/* exchange: the item coming the other way */}
+        {deal.exchange_item ? (
+          <View style={styles.card}>
+            <Text style={styles.label}>{buyer ? 'YOUR ITEM IN THE SWAP' : 'WHAT YOU GET IN EXCHANGE'}</Text>
+            <PhotoGallery images={deal.exchange_item.images} height={200} />
+            <Text style={styles.itemTitle}>{deal.exchange_item.title}</Text>
+            {deal.exchange_item.description ? <Text style={styles.body}>{deal.exchange_item.description}</Text> : null}
+          </View>
+        ) : null}
+
         {/* money */}
         <View style={styles.card}>
           <Text style={styles.label}>PAYMENT</Text>
-          <Row label={lend ? 'Rent (agreed)' : 'Agreed price'} value={rupees(deal.agreed_price)} />
+          {exchange ? (
+            <>
+              <Row
+                label="Top-up"
+                value={Number(deal.agreed_price) > 0 ? rupees(deal.agreed_price) : 'None · straight swap'}
+              />
+              {Number(deal.agreed_price) > 0 ? <Row label="Paid by" value={deal.i_pay ? 'You' : payerName} /> : null}
+            </>
+          ) : (
+            <Row label={lend ? 'Rent (total)' : 'Agreed price'} value={rupees(deal.agreed_price)} />
+          )}
+          {lend && deal.lend_rate ? (
+            <Row label="Agreed rate" value={`${rupees(deal.lend_rate.amount)} / ${deal.lend_rate.unit}`} />
+          ) : null}
           {lend ? <Row label="Refundable deposit" value={rupees(deposit)} /> : null}
           {lend ? <Row label="Total held in escrow" value={rupees(total)} strong /> : null}
           {deal.escrow ? (
@@ -290,10 +329,10 @@ export default function DealScreen() {
                       : 'Refunded'
                 }
               />
-              {deal.escrow.status !== 'held' ? (
+              {deal.escrow.status !== 'held' && Number(deal.escrow.amount) > 0 ? (
                 <>
-                  <Row label="To seller" value={rupees(deal.escrow.released_to_seller)} />
-                  <Row label="Back to buyer" value={rupees(deal.escrow.refunded_to_buyer)} />
+                  <Row label={`To ${buyer ? deal.seller_name : 'you'}`} value={rupees(deal.escrow.released_to_seller)} />
+                  <Row label={`To ${buyer ? 'you' : deal.buyer_name}`} value={rupees(deal.escrow.refunded_to_buyer)} />
                 </>
               ) : null}
             </>
@@ -308,7 +347,7 @@ export default function DealScreen() {
         <ErrorText>{error}</ErrorText>
 
         {/* pay */}
-        {deal.status === 'pending_payment' && buyer ? (
+        {deal.status === 'pending_payment' && deal.i_pay ? (
           <Button
             label={`Pay ${rupees(total)} into escrow`}
             loading={busy === 'pay'}
@@ -332,6 +371,19 @@ export default function DealScreen() {
               onError={setError}
             />
 
+            {(deal.i_show_qr || deal.i_scan_qr) && deal.photo_status ? (
+              <View style={styles.photoChecks}>
+                <PhotoCheck done={deal.photo_status.mine} label="Your photo of the item" />
+                <PhotoCheck done={deal.photo_status.theirs} label={`${counterparty}'s photo`} />
+              </View>
+            ) : null}
+
+            {deal.i_show_qr && !deal.photo_status?.mine ? (
+              <Text style={styles.hint}>
+                Add a photo of the item above first. Your QR unlocks once its condition is on record.
+              </Text>
+            ) : null}
+
             {deal.i_show_qr ? (
               qr && secondsLeft > 0 ? (
                 <View style={styles.qrBox}>
@@ -347,6 +399,7 @@ export default function DealScreen() {
                 <Button
                   label={deal.stage === 'handoff' ? 'Show handoff QR' : 'Show return QR'}
                   loading={busy === 'qr'}
+                  disabled={!deal.photo_status?.mine}
                   onPress={showQr}
                 />
               )
@@ -354,12 +407,14 @@ export default function DealScreen() {
 
             {deal.i_scan_qr ? (
               <>
-                {!stagePhotos.length ? (
-                  <Text style={styles.hint}>Take at least one photo of the item before scanning.</Text>
+                {!deal.photo_status?.mine ? (
+                  <Text style={styles.hint}>
+                    Check the item, then add your own photo of it above. Scanning unlocks after that.
+                  </Text>
                 ) : null}
                 <Button
                   label={deal.stage === 'handoff' ? 'Scan QR to confirm handoff' : 'Scan QR to confirm return'}
-                  disabled={!stagePhotos.length}
+                  disabled={!deal.photo_status?.mine}
                   onPress={() => router.push({ pathname: '/scan/[id]', params: { id: deal.id } })}
                 />
               </>
@@ -389,7 +444,11 @@ export default function DealScreen() {
               <Banner
                 icon="checkmark-done-outline"
                 tone="info"
-                title={deal.dispute.outcome === 'release' ? 'Released to seller' : 'Refunded to buyer'}
+                title={
+                  deal.dispute.outcome === 'release'
+                    ? 'Decided: the deal stands'
+                    : `Decided: refunded to ${deal.i_pay ? 'you' : payerName}`
+                }
                 message={deal.dispute.resolution}
               />
             ) : null}
@@ -455,7 +514,21 @@ export default function DealScreen() {
           />
         ) : null}
       </KeyboardAwareScrollView>
-    </SafeAreaView>
+    </Screen>
+  );
+}
+
+/** A tick or an empty circle: has this side photographed the item yet? */
+function PhotoCheck({ done, label }: { done: boolean; label: string }) {
+  return (
+    <View style={styles.photoCheck}>
+      <Ionicons
+        name={done ? 'checkmark-circle' : 'ellipse-outline'}
+        size={16}
+        color={done ? colors.success : colors.textFaint}
+      />
+      <Text style={[styles.photoCheckText, done && styles.photoCheckDone]}>{label}</Text>
+    </View>
   );
 }
 
@@ -469,27 +542,31 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 }
 
 const styles = StyleSheet.create({
+  photoChecks: { gap: 4 },
+  photoCheck: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  photoCheckText: { fontSize: 12, fontFamily: fonts.regular, color: colors.textMuted },
+  photoCheckDone: { color: colors.text, fontFamily: fonts.semibold },
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   loader: { marginTop: 64 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingTop: 4, paddingBottom: 10 },
+  headerTitle: { fontSize: 19, fontFamily: fonts.displayBold, color: colors.text, letterSpacing: -0.2 },
   content: { padding: 16, paddingBottom: 48, gap: 12 },
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.glassBorder,
     borderRadius: radius.card,
     padding: 14,
-    gap: 10,
+    gap: 10, ...shadow.card,
   },
   disputeCard: { borderColor: colors.error },
   itemRow: { flexDirection: 'row', gap: 12 },
   thumb: { width: 64, height: 64, borderRadius: 12, backgroundColor: colors.surfaceSunk },
   thumbEmpty: { alignItems: 'center', justifyContent: 'center' },
   itemBody: { flex: 1, gap: 5 },
-  itemTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  meta: { fontSize: 12, color: colors.textMuted },
+  itemTitle: { fontSize: 16, fontFamily: fonts.bold, color: colors.text },
+  meta: { fontSize: 12, fontFamily: fonts.regular, color: colors.textMuted },
   steps: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 4 },
   step: { alignItems: 'center', gap: 4, flex: 1 },
   dot: {
@@ -502,15 +579,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dotOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  stepText: { fontSize: 10, color: colors.textFaint, fontWeight: '600' },
+  stepText: { fontSize: 10, color: colors.textFaint, fontFamily: fonts.semibold },
   stepTextOn: { color: colors.primary },
-  next: { fontSize: 13, color: colors.text, lineHeight: 19 },
+  next: { fontSize: 13, fontFamily: fonts.regular, color: colors.text, lineHeight: 19 },
   label: { ...typography.label, color: colors.textMuted },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  rowLabel: { fontSize: 13, color: colors.textMuted },
-  rowValue: { fontSize: 14, color: colors.text, fontWeight: '600', flexShrink: 1, textAlign: 'right' },
-  rowStrong: { fontWeight: '800' },
-  simNote: { fontSize: 11, color: colors.textFaint, fontStyle: 'italic' },
+  rowLabel: { fontSize: 13, fontFamily: fonts.regular, color: colors.textMuted },
+  rowValue: { fontSize: 14, color: colors.text, fontFamily: fonts.semibold, flexShrink: 1, textAlign: 'right' },
+  rowStrong: { fontFamily: fonts.extrabold },
+  simNote: { fontSize: 11, fontFamily: fonts.regular, color: colors.textFaint, fontStyle: 'italic' },
   qrBox: {
     alignItems: 'center',
     gap: 8,
@@ -518,16 +595,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: radius.card,
   },
-  code: { fontSize: 24, fontWeight: '800', letterSpacing: 4, color: colors.text },
-  hint: { fontSize: 12, color: colors.textMuted },
-  body: { fontSize: 14, color: colors.text, lineHeight: 20 },
+  code: { fontSize: 24, fontFamily: fonts.displayBold, letterSpacing: 4, color: colors.text },
+  hint: { fontSize: 12, fontFamily: fonts.regular, color: colors.textMuted },
+  body: { fontSize: 14, fontFamily: fonts.regular, color: colors.text, lineHeight: 20 },
   input: {
     minHeight: 90,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.input,
     padding: 12,
-    fontSize: 14,
+    fontSize: 14, fontFamily: fonts.regular,
     color: colors.text,
     textAlignVertical: 'top',
     backgroundColor: colors.background,

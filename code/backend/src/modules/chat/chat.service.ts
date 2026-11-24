@@ -104,15 +104,16 @@ export class ChatService {
   async listMessages(chatId: string, userId: string) {
     await this.assertParticipant(chatId, userId);
 
+    // The LATEST 200 (FR-CHT-3): take the newest first, then show them oldest → newest.
     const { data, error } = await getSupabaseAdmin()
       .from('messages')
       .select('id, chat_id, sender_id, content, sent_at')
       .eq('chat_id', chatId)
-      .order('sent_at', { ascending: true })
+      .order('sent_at', { ascending: false })
       .limit(200);
 
     if (error) throw new BadRequestException(error.message);
-    return data ?? [];
+    return (data ?? []).reverse();
   }
 
   async sendMessage(chatId: string, userId: string, content: string) {

@@ -1,5 +1,5 @@
 import { File } from 'expo-file-system';
-import { API_URL, apiGet, apiSend, authHeaders } from '../../lib/apiClient';
+import { API_URL, apiGet, apiSend, authHeaders, errorMessage } from '../../lib/apiClient';
 import type { ProfileMe, UploadIdCardResult } from './types';
 
 /**
@@ -30,8 +30,7 @@ export async function uploadIdCard(fileUri: string): Promise<UploadIdCardResult>
     });
 
     if (!res.ok) {
-      const body = await res.text();
-      return { error: body || `Upload failed (${res.status})` };
+      return { error: await errorMessage(res) };
     }
     return { error: null };
   } catch (e) {
@@ -51,6 +50,8 @@ export async function getMyProfile(): Promise<ProfileMe | null> {
 export async function updateProfile(patch: {
   name?: string;
   roll_number?: string;
+  /** A hostel name from the campus list, or null to clear it. */
+  hostel?: string | null;
 }): Promise<{ error: string | null }> {
   try {
     await apiSend('/profile', 'PATCH', patch);

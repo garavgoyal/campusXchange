@@ -1,13 +1,12 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module.js';
+import { configureApp } from './app.setup.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Open CORS is fine for local dev with Expo Go; restrict origins before deploying.
-  app.enableCors();
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  // Security headers, CORS (CORS_ORIGINS), validation — see app.setup.ts.
+  configureApp(app);
 
   const port = process.env.PORT ?? 3000;
   // 0.0.0.0 so the phone running Expo Go can reach it over the LAN.

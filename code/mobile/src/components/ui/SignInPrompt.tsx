@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Button } from './Button';
-import { colors } from '../../constants/colors';
+import { colors, fonts } from '../../constants/colors';
 
 /** Shown wherever a guest hits something that needs an account. */
 export function SignInPrompt({ action }: { action: string }) {
@@ -24,7 +24,7 @@ export function SignInPrompt({ action }: { action: string }) {
 
 const styles = StyleSheet.create({
   wrapper: { alignItems: 'center', gap: 10, paddingHorizontal: 32, paddingVertical: 40 },
-  title: { color: colors.text, fontSize: 18, fontWeight: '600' },
-  message: { color: colors.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  title: { color: colors.text, fontSize: 18, fontFamily: fonts.semibold },
+  message: { color: colors.textMuted, fontSize: 14, fontFamily: fonts.regular, textAlign: 'center', lineHeight: 20 },
   action: { alignSelf: 'stretch', marginTop: 12 },
 });

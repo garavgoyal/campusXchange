@@ -1,5 +1,8 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { getSupabaseAdmin } from '../../database/supabase.client.js';
+import { campusDay } from '../../common/dates/campus-day.js';
+import { PushService } from './push.service.js';
+import { matchedTags } from '../../common/matching/want-tags.js';
 
 /** Every notification type the app knows how to render. */
 export type NotificationType =
@@ -19,8 +22,12 @@ export type NotificationType =
   | 'lend_due'
   | 'dispute_opened'
   | 'dispute_update'
+  | 'exchange_match'
   | 'dispute_resolved'
-  | 'category_alert';
+  | 'category_alert'
+  | 'report_opened'
+  | 'report_update'
+  | 'listing_removed';
 
 export type NotificationPayload = {
   title: string;
@@ -29,6 +36,7 @@ export type NotificationPayload = {
   chat_id?: string;
   transaction_id?: string;
   dispute_id?: string;
+  report_id?: string;
 };
 
 const NOTIFICATION_COLUMNS = 'id, user_id, type, payload, read, created_at';
@@ -44,6 +52,8 @@ const NOTIFICATION_COLUMNS = 'id, user_id, type, payload, read, created_at';
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
+  constructor(private readonly push: PushService) {}
+
   async notify(userId: string, type: NotificationType, payload: NotificationPayload) {
     await this.notifyMany([userId], type, payload);
   }
@@ -58,6 +68,22 @@ export class NotificationsService {
       if (error) this.logger.warn(`Notification (${type}) not saved: ${error.message}`);
     } catch (e) {
       this.logger.warn(`Notification (${type}) failed: ${(e as Error).message}`);
+    }
+
+    // Also to their phones. Lend reminders are skipped: they are only created
+    // when the student opens their inbox, so pushing them would arrive late.
+    if (type !== 'lend_due') {
+      this.push.sendToUsers(unique, {
+        title: payload.title,
+        body: payload.body,
+        data: {
+          type,
+          listing_id: payload.listing_id,
+          chat_id: payload.chat_id,
+          transaction_id: payload.transaction_id,
+          dispute_id: payload.dispute_id,
+        },
+      });
     }
   }
 
@@ -115,6 +141,72 @@ export class NotificationsService {
       body: `"${listing.title}" is now available ${verb}.`,
       listing_id: listing.id,
     });
+  }
+
+  /**
+   * Exchange matching, when a listing goes live (proposal §4.1). Two directions:
+   *  - it's an Exchange: tell its owner how many live items fit what they want,
+   *    and tell those items' owners that someone wants to swap for them;
+   *  - any listing: tell owners of live Exchange listings that want it.
+   * Matching rule: common/matching/want-tags.ts. Capped so one listing can't spam.
+   */
+  async notifyExchangeMatches(listing: {
+    id: string;
+    owner_id: string;
+    title: string;
+    type: string;
+    description?: string | null;
+    category?: string | null;
+    want_tags?: string[] | null;
+  }) {
+    try {
+      const { data: live } = await getSupabaseAdmin()
+        .from('listings')
+        .select('id, owner_id, title, description, category, type, want_tags')
+        .eq('status', 'live')
+        .neq('owner_id', listing.owner_id)
+        .neq('id', listing.id)
+        .limit(1000);
+      const others = (live ?? []) as {
+        id: string;
+        owner_id: string;
+        title: string;
+        description: string | null;
+        category: string | null;
+        type: string;
+        want_tags: string[] | null;
+      }[];
+
+      if (listing.type === 'exchange' && listing.want_tags?.length) {
+        const fits = others.filter((o) => matchedTags(listing.want_tags, o).length > 0);
+        if (fits.length) {
+          await this.notify(listing.owner_id, 'exchange_match', {
+            title: `${fits.length} item${fits.length === 1 ? '' : 's'} match your swap`,
+            body: `Students on campus have what you want for "${listing.title}". Open the listing to see them.`,
+            listing_id: listing.id,
+          });
+          const owners = [...new Set(fits.map((o) => o.owner_id))].slice(0, 20);
+          await this.notifyMany(owners, 'exchange_match', {
+            title: 'Someone wants to swap for your item',
+            body: `"${listing.title}" is up for exchange and its owner wants something you've listed.`,
+            listing_id: listing.id,
+          });
+        }
+      }
+
+      const wanters = others.filter(
+        (o) => o.type === 'exchange' && matchedTags(o.want_tags, listing).length > 0,
+      );
+      for (const wanted of wanters.slice(0, 20)) {
+        await this.notify(wanted.owner_id, 'exchange_match', {
+          title: 'New match for your swap',
+          body: `"${listing.title}" just went live and fits what you want for "${wanted.title}".`,
+          listing_id: listing.id,
+        });
+      }
+    } catch (e) {
+      this.logger.warn(`Exchange matching skipped: ${(e as Error).message}`);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -211,7 +303,7 @@ export class NotificationsService {
         .eq('status', 'in_use');
       if (!borrowing?.length) return;
 
-      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const tomorrow = campusDay(1);
       const { data: due } = await supabase
         .from('lend_details')
         .select('transaction_id, end_date')
@@ -230,7 +322,7 @@ export class NotificationsService {
 
       for (const item of due) {
         if (reminded.has(item.transaction_id)) continue;
-        const today = new Date().toISOString().slice(0, 10);
+        const today = campusDay();
         const overdue = (item.end_date as string) < today;
         await this.notify(userId, 'lend_due', {
           title: overdue ? 'Borrowed item is overdue' : 'Borrowed item due soon',

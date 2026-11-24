@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors } from '../../constants/colors';
+import { colors, fonts } from '../../constants/colors';
 import type { ListingStatus } from '../../features/listings/types';
 
 const LABELS: Record<ListingStatus, string> = {
@@ -21,11 +21,12 @@ const TONES: Record<ListingStatus, string> = {
   removed: colors.error,
 };
 
-export function StatusBadge({ status }: { status: ListingStatus }) {
+/** `takenDown`: an admin removed it after it went live, not a review rejection. */
+export function StatusBadge({ status, takenDown }: { status: ListingStatus; takenDown?: boolean }) {
   const tone = TONES[status];
   return (
     <View style={[styles.badge, { borderColor: tone }]}>
-      <Text style={[styles.text, { color: tone }]}>{LABELS[status]}</Text>
+      <Text style={[styles.text, { color: tone }]}>{takenDown ? 'Taken down' : LABELS[status]}</Text>
     </View>
   );
 }
@@ -38,5 +39,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 3,
   },
-  text: { fontSize: 11, fontWeight: '600' },
+  text: { fontSize: 11, fontFamily: fonts.semibold },
 });

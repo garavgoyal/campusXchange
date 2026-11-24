@@ -90,6 +90,15 @@ export type Deal = DealSummary & {
   stage: PhotoStage | null;
   i_show_qr: boolean;
   i_scan_qr: boolean;
+  /** Who pays into escrow: the buyer, except an Exchange where the owner owes the top-up. */
+  payer_id: string;
+  i_pay: boolean;
+  /** Exchange only: the item the person asking to swap put up. */
+  exchange_item: { title: string; description: string | null; images: string[] } | null;
+  /** Each side must photograph the item for the current stage before the QR step. */
+  photo_status: { stage: PhotoStage; mine: boolean; theirs: boolean } | null;
+  /** Lend only: the agreed rate the rent total was worked out from. */
+  lend_rate: { amount: number; unit: string } | null;
 };
 
 export type QrTicket = {
@@ -101,14 +110,26 @@ export type QrTicket = {
 
 export type CreateDealInput = {
   chat_id: string;
+  /** Where to meet: a campus place name; defaults to the listing's meeting point. */
+  meeting_location?: string;
   start_date?: string;
   end_date?: string;
   deposit_amount?: number;
 };
 
+export type PenaltyTierKey = 'minor' | 'moderate' | 'severe';
+
+/** GET /admin/disputes/penalty-tiers: fixed amounts an admin picks from. */
+export type PenaltyTier = { key: PenaltyTierKey; label: string; amount: number; examples: string };
+
+/** A student's penalty history, shown to the admin while deciding. */
+export type PenaltyRecord = { penalty_total: number; penalties: number };
+
 export type AdminDispute = Dispute & {
   transaction_id: string;
   raised_by_role: 'buyer' | 'seller' | null;
+  buyer_record: PenaltyRecord | null;
+  seller_record: PenaltyRecord | null;
   transaction_status_before: string | null;
   deal: Deal | null;
 };

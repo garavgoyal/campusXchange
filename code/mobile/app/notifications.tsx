@@ -9,12 +9,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ErrorText } from '../src/components/ui/ErrorText';
 import { CATEGORIES } from '../src/constants/categories';
-import { colors, radius, typography } from '../src/constants/colors';
+import { colors, radius, typography, fonts, shadow } from '../src/constants/colors';
 import { useRealtimeRefresh } from '../src/lib/realtime';
 import {
   fetchNotifications,
@@ -26,6 +25,9 @@ import {
 } from '../src/features/notifications/api';
 import { useProfile } from '../src/features/profile/hooks';
 import { formatClock, formatDay } from '../src/utils/formatTime';
+import { BackButton } from '../src/components/ui/BackButton';
+import { Appear, PressScale } from '../src/components/ui/motion';
+import { Screen } from '../src/components/ui/Screen';
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   listing_approved: 'checkmark-circle',
@@ -46,6 +48,10 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   dispute_update: 'help-circle',
   dispute_resolved: 'hammer',
   category_alert: 'sparkles',
+  exchange_match: 'swap-horizontal',
+  report_opened: 'flag',
+  report_update: 'flag-outline',
+  listing_removed: 'trash',
 };
 
 /** Where tapping a notification takes you. */
@@ -53,6 +59,7 @@ function open(n: AppNotification) {
   const p = n.payload;
   if (p.transaction_id) return router.push({ pathname: '/deal/[id]', params: { id: p.transaction_id } });
   if (p.chat_id) return router.push({ pathname: '/chat/[id]', params: { id: p.chat_id } });
+  if (n.type === 'report_opened') return router.push('/(tabs)/admin');
   if (n.type === 'listing_rejected' || n.type === 'listing_approved') return router.push('/(tabs)/history');
   if (p.listing_id) return router.push(`/listing/${p.listing_id}`);
   if (n.type === 'id_rejected') return router.push('/(auth)/id-card');
@@ -123,11 +130,9 @@ export default function NotificationsScreen() {
   const hasUnread = items.some((n) => !n.read);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <Screen style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
-        </Pressable>
+        <BackButton />
         <Text style={styles.headerTitle}>Notifications</Text>
         <View style={styles.flex} />
         {hasUnread ? (
@@ -171,8 +176,9 @@ export default function NotificationsScreen() {
             <EmptyState icon="notifications-off-outline" title="All caught up" message="Updates on your listings, chats and deals appear here." />
           )
         }
-        renderItem={({ item }) => (
-          <Pressable style={[styles.item, !item.read && styles.unread]} onPress={() => tap(item)}>
+        renderItem={({ item, index }) => (
+          <Appear index={index}>
+          <PressScale scaleTo={0.98} style={[styles.item, !item.read && styles.unread]} onPress={() => tap(item)}>
             <View style={[styles.icon, !item.read && styles.iconUnread]}>
               <Ionicons
                 name={ICONS[item.type] ?? 'notifications'}
@@ -188,32 +194,33 @@ export default function NotificationsScreen() {
               </Text>
             </View>
             {!item.read ? <View style={styles.dot} /> : null}
-          </Pressable>
+          </PressScale>
+          </Appear>
         )}
       />
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
-  readAll: { fontSize: 13, color: colors.primary, fontWeight: '600' },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingTop: 4, paddingBottom: 10 },
+  headerTitle: { fontSize: 19, fontFamily: fonts.displayBold, color: colors.text, letterSpacing: -0.2 },
+  readAll: { fontSize: 13, color: colors.primary, fontFamily: fonts.semibold },
   content: { padding: 16, gap: 8, paddingBottom: 40 },
   loader: { marginTop: 48 },
   alerts: {
     gap: 8,
     marginBottom: 8,
     padding: 14,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.card,
+    borderColor: colors.glassBorder,
+    borderRadius: radius.card, ...shadow.card,
   },
   label: { ...typography.label, color: colors.textMuted },
-  alertsSub: { fontSize: 13, color: colors.text },
+  alertsSub: { fontSize: 13, fontFamily: fonts.regular, color: colors.text },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     flexDirection: 'row',
@@ -227,19 +234,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
+  chipText: { fontSize: 12, color: colors.textMuted, fontFamily: fonts.semibold },
   chipTextOn: { color: colors.onBrand },
   item: {
     flexDirection: 'row',
     gap: 12,
     padding: 12,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.glassBorder,
     borderRadius: radius.card,
-    alignItems: 'flex-start',
+    alignItems: 'flex-start', ...shadow.card,
   },
-  unread: { borderColor: colors.primary },
+  unread: { borderColor: colors.primarySoft, backgroundColor: colors.glassStrong },
   icon: {
     width: 34,
     height: 34,
@@ -250,8 +257,8 @@ const styles = StyleSheet.create({
   },
   iconUnread: { backgroundColor: colors.primaryTint },
   body: { flex: 1, gap: 2 },
-  title: { fontSize: 14, fontWeight: '700', color: colors.text },
-  text: { fontSize: 13, color: colors.textMuted, lineHeight: 18 },
-  time: { fontSize: 11, color: colors.textFaint, marginTop: 2 },
+  title: { fontSize: 14, fontFamily: fonts.bold, color: colors.text },
+  text: { fontSize: 13, fontFamily: fonts.regular, color: colors.textMuted, lineHeight: 18 },
+  time: { fontSize: 11, fontFamily: fonts.regular, color: colors.textFaint, marginTop: 2 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary, marginTop: 6 },
 });

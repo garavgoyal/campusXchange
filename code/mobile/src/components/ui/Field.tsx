@@ -1,7 +1,7 @@
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
-import { colors, radius, typography } from '../../constants/colors';
+import { colors, radius, typography, fonts } from '../../constants/colors';
 
 type Props = TextInputProps & {
   /** Small uppercase label above the field. */
@@ -13,6 +13,11 @@ type Props = TextInputProps & {
   valid?: boolean;
 };
 
+/**
+ * A labelled text box. It deliberately keeps no "focused" state: restyling the
+ * box when it gains focus made Android move focus to the next box, round and
+ * round, so nobody could type. The sage cursor shows which box is active.
+ */
 export function Field({ label, hint, leftIcon, valid, style, ...rest }: Props) {
   return (
     <View style={styles.wrap}>
@@ -28,11 +33,11 @@ export function Field({ label, hint, leftIcon, valid, style, ...rest }: Props) {
       )}
 
       <View style={styles.field}>
-        {leftIcon ? (
-          <Ionicons name={leftIcon} size={17} color={colors.textFaint} />
-        ) : null}
+        {leftIcon ? <Ionicons name={leftIcon} size={17} color={colors.textFaint} /> : null}
         <TextInput
           placeholderTextColor={colors.textFaint}
+          cursorColor={colors.primary}
+          selectionColor={colors.primarySoft}
           style={[styles.input, style]}
           {...rest}
         />
@@ -54,7 +59,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  hintText: { fontSize: 11, fontWeight: '700', color: colors.primary },
+  hintText: { fontSize: 11, fontFamily: fonts.bold, color: colors.primary },
   field: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -66,5 +71,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     minHeight: 52,
   },
-  input: { flex: 1, fontSize: 15, color: colors.text, paddingVertical: 14 },
+  input: { flex: 1, fontSize: 15, fontFamily: fonts.regular, color: colors.text, paddingVertical: 14 },
 });

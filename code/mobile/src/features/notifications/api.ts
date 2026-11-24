@@ -11,6 +11,7 @@ export type AppNotification = {
     chat_id?: string;
     transaction_id?: string;
     dispute_id?: string;
+    report_id?: string;
   };
   read: boolean;
   created_at: string;

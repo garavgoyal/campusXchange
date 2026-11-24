@@ -1,7 +1,8 @@
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { colors, radius } from '../../constants/colors';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { PressScale } from './motion';
+import { colors, radius, fonts } from '../../constants/colors';
 
 type Props = {
   options: readonly string[];
@@ -20,7 +21,7 @@ export function Chips({ options, value, onChange, allLabel, icon, wrap }: Props)
   const chips = items.map((item) => {
     const active = item === value;
     return (
-      <Pressable
+      <PressScale
         key={item ?? '__all__'}
         onPress={() => onChange(item)}
         accessibilityRole="button"
@@ -31,11 +32,11 @@ export function Chips({ options, value, onChange, allLabel, icon, wrap }: Props)
           <Ionicons
             name={icon}
             size={13}
-            color={active ? colors.primary : colors.textFaint}
+            color={active ? colors.onBrand : colors.textFaint}
           />
         ) : null}
         <Text style={[styles.label, active && styles.labelActive]}>{item ?? allLabel}</Text>
-      </Pressable>
+      </PressScale>
     );
   });
 
@@ -49,7 +50,7 @@ export function Chips({ options, value, onChange, allLabel, icon, wrap }: Props)
 }
 
 const styles = StyleSheet.create({
-  row: { gap: 8, paddingRight: 16 },
+  row: { gap: 8, paddingRight: 16, paddingVertical: 2 },
   wrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     flexDirection: 'row',
@@ -58,11 +59,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 9,
     borderRadius: radius.chip,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.glassBorder,
   },
-  chipActive: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
-  label: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
-  labelActive: { color: colors.primary },
+  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  label: { fontSize: 13, fontFamily: fonts.semibold, color: colors.textMuted },
+  labelActive: { color: colors.onBrand },
 });

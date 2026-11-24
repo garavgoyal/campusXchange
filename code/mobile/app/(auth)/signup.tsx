@@ -3,13 +3,11 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { Button } from '../../src/components/ui/Button';
@@ -18,9 +16,10 @@ import { Field } from '../../src/components/ui/Field';
 import { sendOtp, verifyOtp } from '../../src/features/auth/api';
 import { nextOnboardingStep } from '../../src/features/auth/onboarding';
 import { updateProfile } from '../../src/features/profile/api';
-import { colors, radius, typography } from '../../src/constants/colors';
+import { colors, radius, typography, fonts, shadow } from '../../src/constants/colors';
 import { COLLEGE_EMAIL_DOMAIN, OTP_MAX_LENGTH, OTP_MIN_LENGTH } from '../../src/constants/config';
 import { isValidCollegeEmail, normalizeEmail } from '../../src/utils/validateEmail';
+import { Screen } from '../../src/components/ui/Screen';
 
 const ROLL_PATTERN = /^\d{9,10}$/;
 
@@ -35,6 +34,8 @@ export default function SignupScreen() {
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** Signed in, but the roll number couldn't be saved (e.g. already registered). */
+  const [rollProblem, setRollProblem] = useState(false);
 
   const codeInput = useRef<TextInput>(null);
 
@@ -76,7 +77,28 @@ export default function SignupScreen() {
     }
 
     // Session exists now, so the details typed above can finally be saved.
-    await updateProfile({ name: name.trim(), roll_number: rollNumber.trim() });
+    await saveDetailsAndContinue();
+  }
+
+  /**
+   * Saves name + roll number. If that fails — most often because the roll
+   * number already belongs to another account — stay here so it can be fixed.
+   * (The email code is already used up, so only the roll number is asked for again.)
+   */
+  async function saveDetailsAndContinue() {
+    setError(null);
+    if (!ROLL_PATTERN.test(rollNumber.trim())) {
+      setVerifying(false);
+      return setError('Your roll number should be 9 or 10 digits');
+    }
+    setVerifying(true);
+    const { error: saveError } = await updateProfile({ name: name.trim(), roll_number: rollNumber.trim() });
+    if (saveError) {
+      setVerifying(false);
+      setRollProblem(true);
+      setNotice(null);
+      return setError(saveError);
+    }
 
     // Returning users who already uploaded an ID must not be asked again.
     const step = await nextOnboardingStep();
@@ -85,7 +107,7 @@ export default function SignupScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <Screen style={styles.safe} edges={['top']}>
       <KeyboardAwareScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -137,11 +159,11 @@ export default function SignupScreen() {
             maxLength={10}
             value={rollNumber}
             onChangeText={(t) => setRollNumber(t.replace(/[^0-9]/g, ''))}
-            editable={!codeSent}
+            editable={!codeSent || rollProblem}
             valid={rollValid}
           />
 
-          {codeSent ? (
+          {codeSent && !rollProblem ? (
             <>
               <View style={styles.gap} />
               <View style={styles.labelRow}>
@@ -169,13 +191,15 @@ export default function SignupScreen() {
 
           <View style={styles.gap} />
 
-          {codeSent ? (
+          {rollProblem ? (
+            <Button label="Save roll number & continue" loading={verifying} onPress={saveDetailsAndContinue} />
+          ) : codeSent ? (
             <Button label="Verify & continue" loading={verifying} onPress={handleVerify} />
           ) : (
             <Button label="Send verification code" loading={sending} onPress={handleSendCode} />
           )}
 
-          {codeSent ? (
+          {codeSent && !rollProblem ? (
             <Pressable
               style={styles.changeLink}
               onPress={() => {
@@ -195,7 +219,7 @@ export default function SignupScreen() {
           Only verified @thapar.edu students can post or message.
         </Text>
       </KeyboardAwareScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
@@ -204,20 +228,20 @@ const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 40, flexGrow: 1, justifyContent: 'center' },
   header: { alignItems: 'center', gap: 6, marginBottom: 22 },
   logo: { width: 56, height: 56, borderRadius: 14, marginBottom: 8 },
-  title: { fontSize: 24, fontWeight: '800', color: colors.text, textAlign: 'center' },
+  title: { fontSize: 24, fontFamily: fonts.displayBold, color: colors.text, textAlign: 'center' },
   subtitle: {
-    fontSize: 14,
+    fontSize: 14, fontFamily: fonts.regular,
     color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 20,
     maxWidth: 280,
   },
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderRadius: radius.sheet,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: 18,
+    borderColor: colors.glassBorder,
+    padding: 18, ...shadow.card,
   },
   gap: { height: 16 },
   labelRow: {
@@ -227,7 +251,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   label: { ...typography.label, color: colors.textMuted, textTransform: 'uppercase' },
-  resend: { fontSize: 12, fontWeight: '700', color: colors.primary },
+  resend: { fontSize: 12, fontFamily: fonts.bold, color: colors.primary },
   codeInput: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -236,11 +260,11 @@ const styles = StyleSheet.create({
     height: 56,
     textAlign: 'center',
     fontSize: 22,
-    fontWeight: '700',
+    fontFamily: fonts.displayBold,
     letterSpacing: 10,
     color: colors.text,
   },
-  notice: { color: colors.success, fontSize: 13, marginTop: 12, fontWeight: '600' },
+  notice: { color: colors.success, fontSize: 13, marginTop: 12, fontFamily: fonts.semibold },
   changeLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -248,11 +272,11 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 16,
   },
-  changeText: { color: colors.textMuted, fontSize: 13 },
+  changeText: { color: colors.textMuted, fontSize: 13, fontFamily: fonts.regular },
   footer: {
     textAlign: 'center',
     color: colors.textFaint,
-    fontSize: 12,
+    fontSize: 12, fontFamily: fonts.regular,
     marginTop: 18,
   },
 });

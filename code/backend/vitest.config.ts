@@ -8,6 +8,7 @@ export default defineConfig({
   test: {
     globals: true,
     root: './',
-    include: ['**/*.spec.ts'],
+    include: ['src/**/*.spec.ts'],
+    reporters: ['default', ['json', { outputFile: 'test-results/unit.json' }]],
   },
 });

@@ -1,0 +1,115 @@
+[
+  {
+    "id": "MT-AUTH-1",
+    "fr": "FR-AUTH-1",
+    "title": "Sign up and sign in with email + OTP only",
+    "steps": "1. Open the app and tap Sign up. 2. Enter name, a real @thapar.edu email and roll number. 3. Tap Send code. 4. Open the email and type the 6-digit code into the app.",
+    "expected": "A code email arrives within a minute. Entering it signs you in. No password is asked for at any point."
+  },
+  {
+    "id": "MT-AUTH-2",
+    "fr": "FR-AUTH-2",
+    "title": "Non-college email is refused in the app before any code is sent",
+    "steps": "1. On the sign-up screen enter someone@gmail.com. 2. Tap Send code.",
+    "expected": "The app shows an error asking for a @thapar.edu address. No email is sent."
+  },
+  {
+    "id": "MT-AUTH-4",
+    "fr": "FR-AUTH-4",
+    "title": "Roll number already registered",
+    "steps": "1. Sign up with a roll number already used by another account. 2. Enter the OTP.",
+    "expected": "The app says the roll number is already registered, keeps you on the screen with the roll number editable, and lets you correct it with 'Save roll number & continue'."
+  },
+  {
+    "id": "MT-AUTH-5",
+    "fr": "FR-AUTH-5",
+    "title": "Upload ID card from camera or gallery",
+    "steps": "1. After signing up, open the ID card screen. 2. Take a photo of the student ID card (or pick one from the gallery). 3. Submit.",
+    "expected": "The upload succeeds and the profile shows 'Verification pending'."
+  },
+  {
+    "id": "MT-AUTH-8",
+    "fr": "FR-AUTH-8",
+    "title": "Sign out",
+    "steps": "1. Profile tab → Sign out. 2. Try to open Chats.",
+    "expected": "You are returned to the guest feed; Chats asks you to sign in."
+  },
+  {
+    "id": "MT-AUTH-9",
+    "fr": "FR-AUTH-9",
+    "title": "Stay signed in after closing the app",
+    "steps": "1. Sign in. 2. Swipe the app away (force close). 3. Open it again.",
+    "expected": "You are still signed in and land on the feed."
+  },
+  {
+    "id": "MT-BRW-6",
+    "fr": "FR-BRW-6",
+    "title": "Guest is asked to sign in for anything except browsing",
+    "steps": "1. Open the app without signing in. 2. Open a listing and tap Chat with seller. 3. Tap the + (List) tab.",
+    "expected": "Each action shows a sign-in prompt instead of doing the action. The listing shows 'Sign in to see the meeting point'."
+  },
+  {
+    "id": "MT-BRW-8",
+    "fr": "FR-BRW-8",
+    "title": "Nearest-first feed after choosing a hostel",
+    "steps": "1. Profile → Your hostel → pick Agira Hall. 2. Home → switch to Nearest.",
+    "expected": "Listings meeting at Agira Hall come first, each card shows a distance. Changing the hostel re-sorts the feed."
+  },
+  {
+    "id": "MT-LST-4",
+    "fr": "FR-LST-4",
+    "title": "Meeting point chosen from a searchable campus list",
+    "steps": "1. + tab → create a listing. 2. Tap Meeting point and type 'lib'.",
+    "expected": "A searchable list of campus places appears and filters to Library. Free text cannot be saved."
+  },
+  {
+    "id": "MT-CHT-8",
+    "fr": "FR-CHT-8",
+    "title": "Messages and offers in one timeline",
+    "steps": "1. Open a chat. 2. Send a message, then make an offer, then send another message.",
+    "expected": "The three appear in the order they were sent, the offer as a card with Accept / Reject for the other person."
+  },
+  {
+    "id": "MT-CHT-10",
+    "fr": "FR-CHT-10",
+    "title": "Messages arrive live",
+    "steps": "1. Open the same chat on two phones (buyer and seller). 2. Send a message from one.",
+    "expected": "It appears on the other phone within about 5 seconds without refreshing (NFR-PRF-5)."
+  },
+  {
+    "id": "MT-HND-2",
+    "fr": "FR-HND-2",
+    "title": "Scan the QR with the phone camera at the meetup",
+    "steps": "1. Seller: open the paid deal, add a condition photo, tap Show QR. 2. Buyer: open the deal, add a condition photo, tap Scan QR and point the camera at the seller's screen.",
+    "expected": "The scan is accepted, both phones show 'Completed' and the money is released to the seller."
+  },
+  {
+    "id": "MT-PAY-6",
+    "fr": "FR-PAY-6",
+    "title": "Deal status is clear to both sides",
+    "steps": "1. Follow one sale from 'Waiting for payment' to 'Completed' on both phones.",
+    "expected": "Each step shows a plain-language status and the next action for the person viewing (NFR-USE-2)."
+  },
+  {
+    "id": "MT-NTF-2",
+    "fr": "FR-NTF-2",
+    "title": "Push notification on a phone (needs a development build)",
+    "steps": "1. Install the development build (not Expo Go). 2. Sign in and allow notifications. 3. From another account, send this user an offer. 4. Lock the phone.",
+    "expected": "A notification 'New offer …' appears on the lock screen; tapping it opens the chat.",
+    "status": "Needs dev build"
+  },
+  {
+    "id": "MT-ADM-1",
+    "fr": "FR-ADM-1",
+    "title": "Review tab only for admins",
+    "steps": "1. Sign in as a student and look at the tab bar. 2. Sign in as an admin (users.role = admin).",
+    "expected": "Students have no Review tab. The admin sees Review with Dashboard, Listings, IDs and Disputes."
+  },
+  {
+    "id": "MT-ADM-6",
+    "fr": "FR-ADM-6",
+    "title": "Admin dashboard in a web browser",
+    "steps": "1. Run the app for web (npx expo start --web). 2. Sign in as an admin in the browser. 3. Open Review → Dashboard.",
+    "expected": "The dashboard shows clearance time against the 4-hour target, the deal metrics and platform totals, and the queues work in the browser."
+  }
+]

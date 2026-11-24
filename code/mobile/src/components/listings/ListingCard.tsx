@@ -1,7 +1,9 @@
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radius } from '../../constants/colors';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import { PressScale } from '../ui/motion';
+import { formatDistanceShort } from '../../utils/formatDistance';
+import { colors, radius, fonts, shadow } from '../../constants/colors';
 import type { Listing } from '../../features/listings/types';
 
 type Props = {
@@ -31,11 +33,7 @@ export function ListingCard({ listing, onPress }: Props) {
   const { main, suffix } = priceParts(listing);
 
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-    >
+    <PressScale onPress={onPress} accessibilityRole="button" style={styles.card}>
       <View style={styles.media}>
         {image ? (
           <Image source={{ uri: image }} style={styles.image} resizeMode="cover" />
@@ -44,6 +42,19 @@ export function ListingCard({ listing, onPress }: Props) {
             <Ionicons name="image-outline" size={22} color={colors.textFaint} />
           </View>
         )}
+
+        {listing.type !== 'sell' ? (
+          <View style={[styles.typeTag, !listing.condition && styles.typeTagTop]}>
+            <Text style={styles.typeTagText}>{listing.type === 'lend' ? 'For rent' : 'Swap'}</Text>
+          </View>
+        ) : null}
+
+        {listing.images.length > 1 ? (
+          <View style={styles.photoCount}>
+            <Ionicons name="images" size={10} color="#fff" />
+            <Text style={styles.photoCountText}>{listing.images.length}</Text>
+          </View>
+        ) : null}
 
         {listing.condition ? (
           <View style={styles.badge}>
@@ -82,35 +93,67 @@ export function ListingCard({ listing, onPress }: Props) {
             {listing.description}
           </Text>
         ) : null}
+
+        {formatDistanceShort(listing.distance_m) ? (
+          <View style={styles.distanceRow}>
+            <Ionicons name="navigate" size={10} color={colors.primary} />
+            <Text style={styles.distanceText}>{formatDistanceShort(listing.distance_m)}</Text>
+          </View>
+        ) : null}
       </View>
-    </Pressable>
+    </PressScale>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
+    borderColor: colors.glassBorder,
+    overflow: 'hidden', ...shadow.card,
   },
-  pressed: { opacity: 0.9 },
   media: { position: 'relative' },
-  image: { width: '100%', height: 128, backgroundColor: colors.surfaceSunk },
+  image: { width: '100%', height: 132, backgroundColor: colors.surfaceSunk },
   imageEmpty: { alignItems: 'center', justifyContent: 'center' },
+  distanceRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  distanceText: { fontSize: 11, fontFamily: fonts.bold, color: colors.primary },
+  photoCount: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(30,43,34,0.55)',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  photoCountText: { color: '#fff', fontSize: 10, fontFamily: fonts.bold },
+  typeTag: {
+    position: 'absolute',
+    top: 34,
+    left: 8,
+    backgroundColor: colors.accent,
+    borderRadius: radius.chip,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  typeTagTop: { top: 8 },
+  typeTagText: { fontSize: 10, fontFamily: fonts.bold, color: colors.onBrand },
   badge: {
     position: 'absolute',
     top: 8,
     left: 8,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glassStrong,
     borderRadius: radius.chip,
     paddingHorizontal: 8,
     paddingVertical: 3,
     maxWidth: '75%',
   },
-  badgeText: { fontSize: 10, fontWeight: '700', color: colors.text },
+  badgeText: { fontSize: 10, fontFamily: fonts.bold, color: colors.text },
   locationTag: {
     position: 'absolute',
     bottom: 8,
@@ -118,17 +161,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: 'rgba(23,23,31,0.72)',
+    backgroundColor: 'rgba(30,43,34,0.62)',
     borderRadius: radius.chip,
     paddingHorizontal: 7,
     paddingVertical: 3,
     maxWidth: '88%',
   },
-  locationText: { fontSize: 10, fontWeight: '600', color: colors.onBrand, flexShrink: 1 },
+  locationText: { fontSize: 10, fontFamily: fonts.semibold, color: colors.onBrand, flexShrink: 1 },
   body: { padding: 10, gap: 2 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
-  price: { fontSize: 16, fontWeight: '800', color: colors.text, flexShrink: 1 },
-  priceSuffix: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
-  title: { fontSize: 13, fontWeight: '600', color: colors.text, lineHeight: 18 },
-  description: { fontSize: 11, color: colors.textMuted },
+  price: { fontSize: 18, fontFamily: fonts.displayBold, color: colors.text, flexShrink: 1, letterSpacing: -0.3 },
+  priceSuffix: { fontSize: 11, fontFamily: fonts.semibold, color: colors.textMuted },
+  title: { fontSize: 13, fontFamily: fonts.semibold, color: colors.text, lineHeight: 18 },
+  description: { fontSize: 11, fontFamily: fonts.regular, color: colors.textMuted },
 });

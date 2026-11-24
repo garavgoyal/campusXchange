@@ -51,3 +51,36 @@ export class CreateListingDto {
   @IsOptional() @IsArray() @ArrayMaxSize(6) @IsString({ each: true })
   images?: string[];
 }
+
+/** Every field optional; the listing type can't change after posting. */
+export class UpdateListingDto {
+  @IsOptional() @IsString() @MinLength(3) @MaxLength(120)
+  title?: string;
+
+  @IsOptional() @IsString() @MaxLength(2000)
+  description?: string;
+
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(60)
+  category?: string;
+
+  @IsOptional() @IsString() @MaxLength(60)
+  condition?: string;
+
+  @IsOptional() @IsNumber() @Min(0)
+  price?: number;
+
+  @IsOptional() @IsNumber() @Min(0)
+  rent_amount?: number;
+
+  @IsOptional() @IsIn(RENT_UNITS)
+  rent_unit?: 'day' | 'week';
+
+  @IsOptional() @IsArray() @ArrayMaxSize(10) @IsString({ each: true })
+  want_tags?: string[];
+
+  @IsOptional() @IsString() @MaxLength(120)
+  meeting_location?: string;
+
+  @IsOptional() @IsArray() @ArrayMaxSize(6) @IsString({ each: true })
+  images?: string[];
+}

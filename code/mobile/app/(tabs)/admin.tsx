@@ -8,8 +8,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
+import { ReportReviewCard } from '../../src/components/admin/ReportReviewCard';
+import { StatsCard } from '../../src/components/admin/StatsCard';
+import { PhotoGallery } from '../../src/components/listings/PhotoGallery';
 import { Button } from '../../src/components/ui/Button';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ErrorText } from '../../src/components/ui/ErrorText';
@@ -17,11 +19,12 @@ import { ScreenTitle } from '../../src/components/ui/ScreenTitle';
 import {
   approveListing,
   decideIdVerification,
+  fetchAdminStats,
   fetchPendingIdVerifications,
   fetchPendingListings,
   rejectListing,
 } from '../../src/features/admin/api';
-import type { IdVerificationItem, ModerationItem } from '../../src/features/admin/types';
+import type { AdminStats, IdVerificationItem, ModerationItem } from '../../src/features/admin/types';
 import { DisputeReviewCard } from '../../src/components/deals/DisputeReviewCard';
 import {
   fetchOpenDisputes,
@@ -29,15 +32,21 @@ import {
   resolveDispute,
 } from '../../src/features/transactions/api';
 import type { AdminDispute } from '../../src/features/transactions/types';
-import { colors } from '../../src/constants/colors';
+import { fetchOpenReports, resolveReport } from '../../src/features/reports/api';
+import type { AdminReport } from '../../src/features/reports/types';
+import { colors, fonts, shadow } from '../../src/constants/colors';
+import { Screen } from '../../src/components/ui/Screen';
 
-type Tab = 'listings' | 'ids' | 'disputes';
+type Tab = 'dashboard' | 'listings' | 'ids' | 'reports' | 'disputes';
 
 export default function AdminScreen() {
-  const [tab, setTab] = useState<Tab>('listings');
+  const [tab, setTab] = useState<Tab>('dashboard');
   const [listings, setListings] = useState<ModerationItem[]>([]);
   const [ids, setIds] = useState<IdVerificationItem[]>([]);
   const [disputes, setDisputes] = useState<AdminDispute[]>([]);
+  const [reports, setReports] = useState<AdminReport[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +62,10 @@ export default function AdminScreen() {
       setListings(queue);
       setIds(verifications);
       setDisputes(open);
+      // Reports need migration 011; an older database just shows none.
+      fetchOpenReports().then(setReports).catch(() => setReports([]));
+      // Analytics are a bonus — never block the queue on them.
+      fetchAdminStats().then(setStats).catch(() => setStats(null));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the review queue');
     } finally {
@@ -93,6 +106,24 @@ export default function AdminScreen() {
     }
   }
 
+  async function decideReport(item: AdminReport, outcome: 'actioned' | 'dismissed', note: string) {
+    setBusyId(item.id);
+    setError(null);
+    setNotice(null);
+    try {
+      await resolveReport(item.id, outcome, note);
+      // Taking a listing down also closes every other open report on it.
+      setReports((prev) =>
+        prev.filter((r) => r.id !== item.id && !(outcome === 'actioned' && item.listing_id && r.listing_id === item.listing_id)),
+      );
+      if (outcome === 'actioned' && item.listing) setNotice(`"${item.listing.title}" was taken down.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save that decision');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function askEvidence(disputeId: string, note: string) {
     setBusyId(disputeId);
     setError(null);
@@ -123,41 +154,47 @@ export default function AdminScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <Screen style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <ScreenTitle>Review queue</ScreenTitle>
+        <ScreenTitle>Admin</ScreenTitle>
 
-        <View style={styles.tabs}>
-          <Pressable
-            onPress={() => setTab('listings')}
-            style={[styles.tab, tab === 'listings' && styles.tabActive]}
-          >
-            <Text style={[styles.tabText, tab === 'listings' && styles.tabTextActive]}>
-              Listings ({listings.length})
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setTab('ids')}
-            style={[styles.tab, tab === 'ids' && styles.tabActive]}
-          >
-            <Text style={[styles.tabText, tab === 'ids' && styles.tabTextActive]}>
-              ID cards ({ids.length})
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setTab('disputes')}
-            style={[styles.tab, tab === 'disputes' && styles.tabActive]}
-          >
-            <Text style={[styles.tabText, tab === 'disputes' && styles.tabTextActive]}>
-              Disputes ({disputes.length})
-            </Text>
-          </Pressable>
-        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+          {(
+            [
+              ['dashboard', 'Dashboard'],
+              ['listings', `Listings ${listings.length}`],
+              ['ids', `IDs ${ids.length}`],
+              ['reports', `Reports ${reports.length}`],
+              ['disputes', `Disputes ${disputes.length}`],
+            ] as [Tab, string][]
+          ).map(([key, label]) => (
+            <Pressable
+              key={key}
+              onPress={() => setTab(key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === key }}
+              style={[styles.tab, tab === key && styles.tabActive]}
+            >
+              <Text style={[styles.tabText, tab === key && styles.tabTextActive]}>{label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
 
         <ErrorText>{error}</ErrorText>
+        {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
         {loading ? (
           <ActivityIndicator color={colors.primary} style={styles.loader} />
+        ) : tab === 'dashboard' ? (
+          stats ? (
+            <StatsCard stats={stats} />
+          ) : (
+            <EmptyState
+              icon="stats-chart-outline"
+              title="No numbers yet"
+              message="Metrics appear once listings have been reviewed and deals made."
+            />
+          )
         ) : tab === 'listings' ? (
           listings.length === 0 ? (
             <EmptyState
@@ -168,6 +205,7 @@ export default function AdminScreen() {
           ) : (
             listings.map((item) => (
               <View key={item.listing.id} style={styles.card}>
+                {item.listing.images?.length ? <PhotoGallery images={item.listing.images} height={180} /> : null}
                 <Text style={styles.cardTitle}>{item.listing.title}</Text>
                 <Text style={styles.cardMeta}>
                   {item.listing.type} · {item.listing.category}
@@ -203,6 +241,23 @@ export default function AdminScreen() {
                   </View>
                 </View>
               </View>
+            ))
+          )
+        ) : tab === 'reports' ? (
+          reports.length === 0 ? (
+            <EmptyState
+              icon="flag-outline"
+              title="No open reports"
+              message="Listings and students reported by others appear here."
+            />
+          ) : (
+            reports.map((item) => (
+              <ReportReviewCard
+                key={item.id}
+                item={item}
+                busy={busyId === item.id}
+                onResolve={(outcome, note) => decideReport(item, outcome, note)}
+              />
             ))
           )
         ) : tab === 'disputes' ? (
@@ -262,7 +317,7 @@ export default function AdminScreen() {
           ))
         )}
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
@@ -271,30 +326,31 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingBottom: 32, gap: 12 },
   tabs: { flexDirection: 'row', gap: 8 },
   tab: {
-    flex: 1,
+    paddingHorizontal: 14,
     paddingVertical: 11,
     borderRadius: 12,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
+    borderColor: colors.glassBorder,
+    alignItems: 'center', ...shadow.card,
   },
   tabActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  tabText: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
+  tabText: { color: colors.textMuted, fontSize: 13, fontFamily: fonts.semibold },
   tabTextActive: { color: '#fff' },
   loader: { marginTop: 48 },
+  notice: { color: colors.success, fontSize: 13, fontFamily: fonts.semibold },
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.glassBorder,
     borderRadius: 14,
     padding: 14,
-    gap: 6,
+    gap: 6, ...shadow.card,
   },
-  cardTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  cardMeta: { color: colors.textMuted, fontSize: 13 },
-  cardBody: { color: colors.text, fontSize: 14, lineHeight: 20 },
-  flagScore: { color: colors.textMuted, fontSize: 12, fontStyle: 'italic' },
+  cardTitle: { color: colors.text, fontSize: 16, fontFamily: fonts.bold },
+  cardMeta: { color: colors.textMuted, fontSize: 13, fontFamily: fonts.regular },
+  cardBody: { color: colors.text, fontSize: 14, fontFamily: fonts.regular, lineHeight: 20 },
+  flagScore: { color: colors.textMuted, fontSize: 12, fontFamily: fonts.regular, fontStyle: 'italic' },
   idImage: { width: '100%', height: 170, borderRadius: 8, marginTop: 6 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 8 },
   actionItem: { flex: 1 },

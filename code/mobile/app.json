@@ -6,12 +6,6 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.campusxchange.app",
@@ -22,14 +16,13 @@
     },
     "android": {
       "package": "com.campusxchange.app",
-      "edgeToEdgeEnabled": true,
       "permissions": [
         "CAMERA",
         "READ_MEDIA_IMAGES"
       ],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
-        "backgroundColor": "#FFFFFF"
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#1A1F25"
       }
     },
     "plugins": [
@@ -42,13 +35,30 @@
         }
       ],
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/logo.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#F4F2EA"
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "CampusXchange uses your camera to photograph your student ID, take item condition photos at handoff, and scan deal QR codes.",
           "recordAudioAndroid": false
         }
+      ],
+      "expo-font",
+      "expo-splash-screen",
+      [
+        "expo-notifications",
+        {
+          "color": "#557459"
+        }
       ]
     ],
-    "icon": "./assets/logo.png"
+    "icon": "./assets/icon.png"
   }
 }
