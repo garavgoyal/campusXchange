@@ -1,0 +1,2 @@
+Wrote migrations 003 to 011 (row-level security on every table, deal and dispute schema, real-time updates, the campus map, unique roll numbers, reports with the takedown trigger), taking the database to 17 tables. 
+Built the test database and the GitHub Actions CI pipeline, ran the security review, set up SMTP for sign-in emails, and led SRS 2.1 and the test-case sheet.
