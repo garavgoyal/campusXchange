@@ -1,0 +1,3 @@
+Mid-semester: set up the app's navigation and tab layout with Expo Router, and built the feed, search, filters and the create-listing screen.
+After Mid-semster: built the deal tracker, QR scanning with condition photos and the lend return flow, plus listing detail and edit, profile, My listings and notifications screens; redesigned the UI (sage, off-white and tomato theme) and fixed the Android text-box focus bug.
+Released the Android app with EAS Build and the website on EAS Hosting, wrote the app's 14 unit tests, and led the final project report.
