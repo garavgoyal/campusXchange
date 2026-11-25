@@ -1,0 +1,10 @@
+Mid-semester: structured the NestJS backend into modules and built the
+listing endpoints, photo and ID-card uploads, request validation and the API
+contract.
+Second half: built the transactions module (simulated escrow, cancellation,
+exchange top-ups), single-use QR handover, the lend cycle with reminders and
+deposit refunds, disputes with penalty tiers, and notifications with Expo
+push and category alerts.
+Hardened the API (image content checks, 8 MB limit, rate limits, security
+headers), fixed the UTC vs Indian time bug in due dates, and deployed the
+backend on Render.
