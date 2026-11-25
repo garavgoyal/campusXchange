@@ -1,0 +1,27 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://campusxchange-6kuw.onrender.com",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ladjrrhnamwpgqppjddy.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZGpycmhuYW13cGdxcHBqZGR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNDU1NzMsImV4cCI6MjEwMzgyMTU3M30.LZvO2QrHD3zKsGLc3mv-diUJNhMCcbatolOtL3K3cqg"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://campusxchange-6kuw.onrender.com",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ladjrrhnamwpgqppjddy.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZGpycmhuYW13cGdxcHBqZGR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNDU1NzMsImV4cCI6MjEwMzgyMTU3M30.LZvO2QrHD3zKsGLc3mv-diUJNhMCcbatolOtL3K3cqg"
+      }
+    }
+  }
+}
