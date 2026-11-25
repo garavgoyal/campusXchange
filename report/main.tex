@@ -1,42 +1,36 @@
 \documentclass{tietreport}
+
 % Import images
 \usepackage[final]{graphicx}
-% Bibliography configuration
-\usepackage[
-  date=year,
-  style=alphabetic,
-  backend=biber,
-  sorting=nty,
-  maxnames=5,
-  minnames=3,
-  maxalphanames=4,
-  minalphanames=3,
-  backref=true,
-  doi=false,
-  isbn=false,
-  url=false,
-  eprint=false
-]{biblatex}
-\addbibresource{references.bib}
+
 % Chapters open on the next available page rather than always a
 % right-hand one, which is what was inserting blank filler pages.
 \let\cleardoublepage\clearpage
+
+% Let lines stretch a little instead of running into the
+% margin when a long name (such as a web address) cannot break.
+\setlength{\emergencystretch}{3em}
+
 %% ==================================================
 %% CUSTOMIZE THESE FIELDS FOR YOUR PROJECT
 %% ==================================================
+
 % Course/Lab header
 \TitlePageHeader{%
   UCS503P - Software Engineering Laboratory%
 }
+
 % Main project title
 \ProjectTitle{%
   CampusXchange%
 }
+
 % Subtitle or project description
 \ProjectSubTitle{%
   A Campus-Verified Marketplace for Selling,
   Lending, and Exchange%
 }
+
 % Student information (up to 4 students)
 \author{%
   \texttt{1024030098} Garav Goyal \\
@@ -44,346 +38,403 @@
   \texttt{1024030116} Parth Zutshi \\
   \texttt{1024030118} Harjap Singh Benipal%
 }
+
 % Group number, degree, year, program
 \TitlePageSubText{%
   Group: \texttt{3C-14} BE Third Year, CSE%
 }
+
 % Faculty advisor/guide name
 \AdvisorName{%
   Dr. Anushka%
 }
+
 % Evaluation period and department info
 \TitlePageFooterText{{%
-    \large Mid-Semester Evaluation \\[0.2cm]
+    \large End-Semester Evaluation \\[0.2cm]
     \bfseries Computer Science and Engineering
     Department%
   } \\[0.15cm]
   Thapar Institute of Engineering and Technology,
   Patiala%
 }
+
 %% ==================================================
+
 \begin{document}
+
 % Generate title page
 \maketitle
+
 % Table of contents (auto-generated from chapters)
 \tableofcontents
-% ===== CHAPTER 1: INTRODUCTION =====
-\chapter{Introduction}
-\section{Background and Context}
-Campus commerce today runs on ad hoc, trust-optional
-channels: hostel WhatsApp groups, batch chats, and the
-occasional physical noticeboard. None of these were
-designed for several hundred people who mostly do not
-know each other to buy, sell, lend, or swap items
-safely.
 
-The inefficiency is not evenly spread across time. A
-campus effectively re-runs the same shopping list every
-semester: the same textbooks, calculators, drafters,
-and lab coats change hands within a fixed population
-that renews itself each year. That repetition means even
-a modest improvement to trust and discoverability
-compounds across thousands of small trades annually, in
-a way it would not for a marketplace serving one-off
-strangers.
+% ===== CHAPTER 1: INTRODUCTION =====
+
+\chapter{Introduction}
+
+\section{Background and Context}
+
+At Thapar, most buying and selling between students happens
+in hostel WhatsApp groups, batch chats and the odd poster on
+a noticeboard. These work well enough between friends, but
+they were never meant for hundreds of students who don't
+know each other to trade safely.
+
+The same items change hands every semester. Seniors sell
+their textbooks, calculators, drafters, cycles and lab coats,
+and the incoming batch needs exactly those things. Because
+this happens again and again inside the same small
+community, even a small improvement in trust and visibility
+adds up to a lot of trades over a year.
+
+CampusXchange is our answer to this. It is a mobile
+marketplace only for Thapar students. Everyone who uses it is
+verified as a student, every listing is checked by an
+administrator before it goes public, and every deal follows
+a fixed path. The buyer and seller agree on a price through
+structured offers, the payment is held in escrow, the item is
+handed over at a campus meeting point after scanning a QR
+code, and both sides photograph the item's condition. For
+borrowed items there is also a verified return. This report
+describes the system as we have built and deployed it by the
+end of the semester.
 
 \subsection{Problem Statement}
-Four specific failures characterise the current
-situation:
+
+We identified four problems with the way students trade
+today.
 
 \begin{itemize}
-  \item \textbf{No single place to look.} A listing
-    lives in one hostel-wing group or one batch chat, so
-    it rarely reaches anyone outside the poster's own
-    circle. Buyers and sellers who would gladly trade
-    never find each other.
-  \item \textbf{Strangers with no proof.} Anyone can be
-    added to these groups, including people with no
-    genuine link to the college. There is no reliable
-    way to confirm the other party is a current student
-    before money or goods change hands.
-  \item \textbf{Lending has no memory.} Every exchange
-    is treated as a one-off sale. Nothing tracks who
-    borrowed what, when it is due back, or whether a
-    deposit was returned, so lending barely happens,
-    despite being the natural fit for short-term items.
-  \item \textbf{No recourse when it goes wrong.} If an
-    item arrives damaged or a seller disappears after
-    payment, there is no escrow, no verified handoff
-    record, and no one to appeal to.
+  \item \textbf{No single place to look.} A listing posted in
+    one hostel group or one batch chat rarely reaches anyone
+    outside that circle, so buyers and sellers who would
+    happily trade never find each other.
+  \item \textbf{No way to know who you are dealing with.}
+    Anyone can be added to these groups, including people
+    with no link to the college. There is no reliable way to
+    check that the other person is a current student before
+    money or goods change hands.
+  \item \textbf{Lending is not tracked.} Every exchange is
+    treated as a one-off sale. Nobody records who borrowed
+    what, when it is due back or whether the deposit was
+    returned, so students rarely lend things out, even
+    though lending suits short-term items best.
+  \item \textbf{Nothing to fall back on when things go
+    wrong.} If an item turns out to be damaged or a seller
+    disappears after being paid, there is no escrow, no
+    record of the handover and nobody to complain to.
 \end{itemize}
 
-CampusXchange addresses these by building a mobile
-marketplace in which identity is verified against the
-institution, every listing is reviewed before publication,
-and negotiation is recorded by the system rather than
-left to informal chat.
+CampusXchange tackles each of these. It checks identity
+against the college, publishes listings only after review,
+stores negotiations as structured offers, holds payment
+until a verified handover, and lets an administrator settle
+disputes using photographs taken at the meeting.
 
 \section{Project Objectives}
+
 \begin{enumerate}
-  \item \textbf{Verified access:} Restrict participation
-    to holders of a valid \texttt{@thapar.edu} address,
-    enforced in the database and not merely in the
-    client, with each account additionally carrying a
-    roll number and a manually reviewed student ID card.
-  \item \textbf{Unified listing surface:} Provide a
-    single searchable feed covering all three
-    transaction types (Sell, Lend/Rent, and Exchange),
-    filterable by category, replacing scattered
-    group chats.
-  \item \textbf{Moderated publication:} Ensure no listing
-    reaches the public feed without passing through an
-    administrative review queue, so trust and safety is
-    a structural property of the system rather than a
-    policy statement.
-  \item \textbf{Recorded negotiation:} Move price
-    agreement out of free-text conversation and into
-    structured offers that the system stores, so that a
-    concluded deal has an auditable record.
-  \item \textbf{Complete system model:} Produce a full
-    UML specification of the system (including the
-    transaction, handoff, and dispute phases scheduled
-    after this evaluation), so that implementation of
-    the remaining modules proceeds from a validated
-    design.
+  \item \textbf{Verified access (O1):} Only students with a
+    valid \texttt{@thapar.edu} email can join. The database
+    enforces this, not just the app. Each account also needs
+    a unique roll number and a student ID card that an
+    administrator approves before the student can trade.
+  \item \textbf{One marketplace for three kinds of deal
+    (O2):} A single searchable feed for Sell, Lend/Rent and
+    Exchange listings, with category filters and an option
+    to sort by distance from the student's hostel.
+  \item \textbf{Trust and safety (O3):} No listing appears
+    publicly until an administrator has reviewed it.
+    Students can also report a listing or another student,
+    and an administrator can take a live listing down.
+  \item \textbf{Recorded negotiation (O4):} Prices and swaps
+    are agreed through structured offers that the system
+    stores, delivered to both sides in real time.
+  \item \textbf{Escrow and verified handover (O5):} Payment
+    stays in escrow until the buyer scans a single-use QR
+    code at the meeting. Condition photographs are taken at
+    handover and return, and lend periods, deposits and due
+    dates are tracked.
+  \item \textbf{Dispute handling (O6):} Either side can
+    report a problem, which freezes the money until an
+    administrator decides the case from the photographs and,
+    if needed, applies a fixed penalty.
+  \item \textbf{Measurable evaluation (O7):} The system
+    records the timestamps needed for the metrics in our
+    proposal, especially time to listing clearance (TLC),
+    and shows them to administrators.
 \end{enumerate}
 
-These objectives are deliberately scoped so that each is
-independently demonstrable at the mid-semester
-evaluation, with the remaining transaction core designed
-and modelled but explicitly deferred.
+Our Software Requirements Specification (SRS, version 2.1)
+breaks these seven objectives down into 81 functional and 37
+non-functional requirements, and every functional
+requirement that we built has at least one test case
+(Chapter~\ref{ch:results}). The objectives were realistic for
+one semester because we used a managed platform for login,
+file storage and real-time updates, which left us free to
+focus on the marketplace itself.
 
 % ===== CHAPTER 2: METHODOLOGY & DESIGN =====
+
 \chapter{Methodology and Design}
+
 \section{System Architecture}
-CampusXchange follows a three-tier architecture: a
-mobile client, a stateless backend API, and a managed
-data platform. A deliberate design decision separates
-two paths through the system: authentication traffic
-goes directly from the client to the identity provider,
-while all application data is mediated by the backend.
+
+The system has three tiers: the app that students use, a
+backend API that holds the business logic, and a managed
+data platform. We kept two paths separate on purpose. Signing
+in goes straight from the app to the identity provider,
+while every other read and write goes through our backend. A
+third, read-only path sends live updates from the database
+to the app.
 
 \subsection{High-Level Design}
-Figure~\ref{fig:architecture} shows the system as
-currently built. Boxes drawn solid are implemented and
-verified; those drawn dashed are designed but not yet
-coded.
 
-\begin{figure}[h]
+Figure~\ref{fig:architecture} shows the system as it is
+built and deployed now.
+
+\begin{figure}[htbp]
   \centering
-  \includegraphics[width=\textwidth]{figures/architecture-highlevel.png}
-  \caption{High-level system architecture. Solid
-    components are implemented; dashed components are
-    designed and scheduled for the next phase.}
+  \includegraphics[width=\textwidth]{figures/architecture-deployed.png}
+  \caption{High-level architecture as built and deployed.
+    Solid boxes are implemented and tested. Dashed boxes are
+    simulated in the pilot or still to be set up.}
   \label{fig:architecture}
 \end{figure}
 
-The major components interact as follows:
+The main parts work together as follows.
 
 \begin{itemize}
-  \item \textbf{Mobile client.} The only user-facing
-    surface. It serves three classes of user: a
-    verified student, a guest who may browse but not
-    act, and an administrator whose additional review
-    screen is unlocked by a role flag on their account.
-  \item \textbf{Authentication path.} The client calls
-    the identity provider directly to request and verify
-    a one-time password. The backend is not involved in
-    this exchange; it only ever receives the resulting
-    session token. This keeps credential handling
-    entirely outside our own code.
-  \item \textbf{Backend API.} A stateless service
-    organised into feature modules, fronted by a guard
-    layer that validates every incoming request before
-    any business logic executes. Three guards exist: one
-    requiring a valid session, one that permits
-    anonymous access while still identifying a caller if
-    a token is present, and one that additionally
-    requires an administrator role.
-  \item \textbf{Data platform.} A managed PostgreSQL
-    instance plus two object-storage buckets. The
-    separation of the buckets is a security decision:
-    student ID cards are held privately and reached only
-    through short-lived signed URLs issued to
-    administrators, whereas listing photographs are
-    public because every browsing user, including
-    guests, must be able to load them.
+  \item \textbf{The app.} A single React Native codebase
+    serves verified students, guests (who can browse but not
+    trade) and administrators, who get an extra
+    \emph{Review} tab because of a role flag on their
+    account. The same code is built both as an Android app
+    and as a website, and the website doubles as the
+    administrators' web dashboard.
+  \item \textbf{Signing in.} The app asks the identity
+    provider for a one-time code and checks it directly. Our
+    backend never sees the code or a password. It only
+    receives the session token that results, and it checks
+    that token on every request.
+  \item \textbf{The backend.} A stateless NestJS service with
+    eight modules (profile, listings, campus, chat and
+    offers, transactions, notifications, reports and admin)
+    and 53 endpoints. Each request first passes a security
+    layer that adds security headers, limits which websites
+    may call the API, applies rate limits and validates the
+    input. It then goes through one of three guards. The
+    first needs a valid session. The second lets guests in
+    but still recognises a signed-in user. The third also
+    reads the user's admin role from the database.
+  \item \textbf{The data platform.} A managed PostgreSQL
+    database with 17 tables, all protected by row-level
+    security, plus three storage buckets and a real-time
+    channel for messages, offers, deals and notifications.
+    ID cards and condition photographs sit in private
+    buckets and can only be opened through signed links that
+    expire (after ten minutes for ID cards and thirty for
+    condition photographs). Listing photos are public, since
+    everyone, including guests, needs to see them.
+  \item \textbf{Outside services.} An SMTP provider emails
+    the sign-in code. Phone notifications are sent through
+    Expo's push service; the code for this is written, and
+    turning it on for the Android app only needs a Firebase
+    project, which we have not set up yet. The payment
+    gateway is simulated for the pilot. Escrow holds,
+    releases and refunds are all recorded and every rule is
+    enforced, but no real money moves.
 \end{itemize}
 
-Two aspects of Figure~\ref{fig:architecture} deserve
-particular attention. First, the backend holds a
-privileged database key that bypasses row-level security;
-this is why that key never ships inside the mobile
-application. Second, guest browsing is served by the
-same endpoint as authenticated browsing: the backend
-detects the absence of a token and withholds the meeting
-location from the response, so an unauthenticated user
-can see what is for sale but not where the exchange
-would take place.
+Two details in the figure are worth explaining. The backend
+uses a privileged database key that skips row-level security,
+so that key lives only in the backend's settings and never in
+the app. The app only has the public key, and with row-level
+security turned on, that key cannot read or change any table
+by itself. Second, guests and signed-in users browse through
+the same endpoint. When there is no token, the backend simply
+leaves out the meeting location, so a guest can see what is
+on sale but not where the handover would happen.
 
 \subsection{Technical Stack}
+
 \begin{itemize}
-  \item \textbf{Framework/Language:} React Native with
-    Expo (SDK 57) and Expo Router for the mobile client;
-    NestJS on Node.js for the backend API. TypeScript
-    throughout, giving a single type vocabulary across
-    both tiers.
-  \item \textbf{Database:} PostgreSQL, provisioned
-    through Supabase. Thirteen tables model the complete
-    system; five are exercised by the code delivered so
-    far.
-  \item \textbf{Tools:} Git and GitHub for version
-    control, with a GitHub Actions workflow that
-    type-checks the mobile application and compiles the
-    backend on every push; draw.io for UML modelling;
-    Expo Go for on-device testing.
-  \item \textbf{Libraries:} Supabase client libraries for
-    authentication, database access and object storage;
-    \texttt{class-validator} for request validation at
-    the API boundary; \texttt{expo-image-picker} and
-    \texttt{expo-file-system} for photograph capture and
-    upload.
+  \item \textbf{Framework/Language:} React Native 0.86 with
+    Expo SDK 57 and Expo Router for the app, and NestJS 12 on
+    Node.js for the backend. Everything is written in
+    TypeScript 6 in strict mode, so both tiers share the same
+    types.
+  \item \textbf{Database:} PostgreSQL, hosted on Supabase,
+    which also gives us login, file storage and real-time
+    updates. The schema is built by twelve SQL migration
+    files, numbered 000 to 011, kept in the repository.
+  \item \textbf{Tools:} Git and GitHub for version control,
+    GitHub Actions for continuous integration, Vitest for
+    unit and end-to-end tests, PostgREST and a PostgreSQL 16
+    container to run the end-to-end tests against a real
+    database in CI, oxlint for linting, draw.io for the UML
+    diagrams and Expo Go for testing on our phones during
+    development.
+  \item \textbf{Deployment:} The backend runs on Render's
+    free web service tier, EAS Build produces the Android
+    app, and EAS Hosting serves the website at
+    \texttt{campusxchange\allowbreak.expo\allowbreak.app}.
+  \item \textbf{Libraries:} the Supabase client libraries,
+    \texttt{class-validator} for checking requests,
+    \texttt{@nestjs/throttler} and \texttt{helmet} for rate
+    limits and security headers, \texttt{expo-camera} for
+    scanning QR codes, \texttt{expo-image-picker} for photos,
+    \texttt{react-native-reanimated} for the small amount of
+    animation in the interface, and
+    \texttt{expo-notifications} for push notifications.
 \end{itemize}
 
 \subsection{System Modelling and UML Diagrams}
-The system was specified using four UML diagram types
-before and alongside implementation. Together they
-answer four different questions: what the system does
-(use case), what data it holds (class), what messages
-are exchanged (sequence), and what the workflow is
-(activity). Every diagram covers the complete proposed
-system, including the modules deferred past this
-evaluation, so that the deferred work proceeds from a
-validated design rather than from scratch.
+
+Before and during development we modelled the system with
+four kinds of UML diagram. Each one answers a different
+question. The use case diagram shows what the system does,
+the class diagram shows what data it stores, the sequence
+diagrams show which messages pass between the parts, and the
+activity diagrams show how the workflow branches. We drew
+them for the whole system at mid-semester, when payments,
+handover and disputes were still to be built, and then built
+those parts to match. In practice the diagrams became the
+specification for the second half of the project.
 
 \subsubsection{Use Case Diagram}
-Figure~\ref{fig:usecase} identifies four actors and
-nineteen use cases. The actors are Student, Verified
-Student, Administrator, and an external Notification
-Service.
 
-\begin{figure}[h]
+Figure~\ref{fig:usecase} has four actors (Student, Verified
+Student, Administrator and an external Notification Service)
+and nineteen use cases.
+
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{figures/usecase.png}
-  \caption{Use case diagram: four actors and nineteen
-    use cases, partitioned by privilege level.}
+  \caption{Use case diagram: four actors and nineteen use
+    cases, grouped by privilege level.}
   \label{fig:usecase}
 \end{figure}
 
-The important structural feature is the partition into
-privilege bands. A merely signed-up Student may sign up,
-upload an ID card, browse, and receive category alerts.
-Only a Verified Student, one whose ID card has been
-approved by an administrator, may create listings,
-negotiate, pay, or raise a dispute. Verified Student
-generalises Student, so the second band inherits
-everything in the first. This is the diagram-level
-expression of the project's central claim: that
-verification is a gate, not a badge.
-
-The Notification Service is modelled as a secondary
-actor. It receives output from the system but never
-initiates a use case, which is the same relationship the
-Payment Gateway holds in the sequence diagrams.
+The use cases are split by privilege. A student who has
+only signed up can upload an ID card, browse and receive
+category alerts. Creating listings, negotiating, paying and
+raising disputes are only for a Verified Student, meaning
+someone whose ID card an administrator has approved. Since
+Verified Student is a specialisation of Student, it inherits
+everything in the first group. This is how the diagram shows
+the central idea of the project: verification decides what
+you are allowed to do. The backend enforces the same rule,
+because every trading endpoint checks whether the caller is
+verified.
 
 \subsubsection{Class and Entity-Relationship Diagram}
-Figure~\ref{fig:class} presents all thirteen tables with
-their full columns and constraint flags, generated
-directly from the live database schema.
 
-\begin{figure}[h]
+Figure~\ref{fig:class} shows the thirteen core tables with
+their columns and constraints, generated from the database
+schema.
+
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{figures/class-er.png}
-  \caption{Class / entity-relationship diagram: thirteen
-    tables with primary, foreign and not-null
-    constraints.}
+  \caption{Class and entity-relationship diagram of the
+    thirteen core tables, with primary key, foreign key and
+    not-null constraints. The four supporting tables added
+    later are described in the text.}
   \label{fig:class}
 \end{figure}
 
-Two modelling decisions are worth drawing out. First,
-\texttt{public.users} is not the source of identity:
-its primary key is a foreign key to the
-authentication provider's own user table. Our table is a
-profile that extends an identity owned elsewhere, and a
-database trigger creates that profile row automatically
-the moment an account is created. Second, every foreign
-key is drawn as its own connector rather than being
-merged into a conceptual relationship: \texttt{chats}
-references \texttt{users} twice (as initiator and as
-owner), and \texttt{transactions} references it twice
-again (as buyer and as seller). Collapsing these into a
-single ``participates in'' line would have hidden the
-fact that the two roles are separately constrained.
+Two choices in this model are worth pointing out. First,
+\texttt{public.users} is not where identity comes from. Its
+primary key is a foreign key to the login provider's own
+user table, so our table is a profile attached to an
+identity that is managed elsewhere. A database trigger
+creates this profile automatically as soon as an account is
+made. Second, we drew every foreign key as its own line. The
+\texttt{chats} table points to \texttt{users} twice (once for
+the buyer who started the chat and once for the owner), and
+\texttt{transactions} does the same for buyer and seller. A
+single ``participates in'' line would have hidden the fact
+that each role has its own rules.
+
+We added four supporting tables in the second half of the
+semester. \texttt{campus\_\allowbreak locations} stores the
+18 hostels and campus meeting points with their coordinates,
+which we use to sort listings by distance.
+\texttt{category\_\allowbreak subscriptions} stores category
+and want-tag alerts, \texttt{push\_\allowbreak tokens} stores
+the phones that receive notifications, and \texttt{reports}
+stores reports against listings or students. The
+\texttt{listings} table also gained columns that record when
+and why an administrator took a listing down.
 
 \subsubsection{Sequence Diagrams}
-The sequence model is one continuous diagram spanning
-three pages, connected by labelled off-page connectors.
-It traces the full lifetime of a transaction at the
-level of individual messages between participants.
 
-\begin{figure}[h]
+The sequence model is one continuous diagram split over
+three pages and joined by labelled connectors. It follows a
+transaction from start to finish, one message at a time.
+
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{figures/sequence-1-signup-moderation.png}
-  \caption{Sequence diagram (1 of 3): signup, ID
+  \caption{Sequence diagram (1 of 3): sign-up, ID
     verification, listing creation and moderation.}
   \label{fig:seq1}
 \end{figure}
 
-Figure~\ref{fig:seq1} covers signup and moderation.
-Steps~1--5 show the one-time password exchange happening
-between the student and the authentication provider
-directly, with the database receiving an automatically
-triggered profile row rather than an explicit insert
-from our backend. Steps~8--13 show the administrator's
-side of ID verification. Step~18 is drawn dashed: the
-automated content-flag score is not wired up, so in the
-delivered system every listing reaches the human review
-queue regardless of score.
+Figure~\ref{fig:seq1} covers sign-up and moderation. Steps 1
+to 5 show the one-time code being exchanged directly between
+the student and the login provider. The database gets its
+profile row from a trigger rather than from an insert by our
+backend. Steps 8 to 13 show the administrator verifying an ID
+card. Step 18 is dashed because the automatic content score
+was never connected, so every listing goes to a human
+reviewer.
 
-\begin{figure}[h]
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{figures/sequence-2-negotiation-payment.png}
   \caption{Sequence diagram (2 of 3): browsing, chat,
-    multi-buyer negotiation, payment and escrow.}
+    negotiation with several buyers, payment and escrow.}
   \label{fig:seq2}
 \end{figure}
 
-Figure~\ref{fig:seq2} covers negotiation. The
-\texttt{loop} fragment around steps~5--7 is significant:
-it makes explicit that several buyers may be negotiating
-on the same listing concurrently, and that the seller
-chooses between them. A diagram without that fragment
-would have implied a single buyer and quietly designed
-out the competition the marketplace depends on. The
-\texttt{opt} fragment at step~14 records that lend-specific
-terms are stored only for lend transactions.
+Figure~\ref{fig:seq2} covers negotiation. The \texttt{loop}
+fragment around steps 5 to 7 shows that several buyers can
+negotiate for the same listing at the same time and that the
+seller picks one of them. The app works exactly like this:
+each buyer gets their own chat thread, and when the seller
+finalises the deal, a transaction is created for the chosen
+buyer. The \texttt{opt} fragment at step 14 shows that lend
+terms are only stored for lend transactions.
 
-\begin{figure}[h]
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{figures/sequence-3-handoff-disputes.png}
-  \caption{Sequence diagram (3 of 3): QR-verified
-    handoff, settlement and dispute resolution.}
+  \caption{Sequence diagram (3 of 3): QR-verified handover,
+    settlement and dispute resolution.}
   \label{fig:seq3}
 \end{figure}
 
-Figure~\ref{fig:seq3} covers handoff and settlement. The
-\texttt{alt} fragment separates the sell and exchange
-path, where escrow releases immediately on a valid QR
-scan, from the lend path, which additionally requires a
-return leg with its own condition photographs before the
-deposit is settled. Modelling these as alternatives
-rather than reusing the sell path prevented a real design
-error: a borrowed item would otherwise have been
-marked complete at handoff, before it was returned.
+Figure~\ref{fig:seq3} covers the handover and settlement.
+The \texttt{alt} fragment separates two cases. For a sale or
+an exchange, escrow is released when the QR code is scanned.
+For a lend, the item also has to come back, with its own
+condition photographs, before the deposit is settled.
+Drawing these as separate branches caught a real design
+mistake early: if lending had reused the sale path, a
+borrowed item would have been marked complete at the
+handover, before it was ever returned.
 
 \subsubsection{Activity Diagrams}
-The activity model mirrors the same three phases at the
-level of decisions and control flow rather than
-messages. Where the sequence diagrams answer ``who sends
-what to whom,'' these answer ``what is decided, and what
-happens on each branch.''
 
-\begin{figure}[h]
+The activity diagrams cover the same three phases, but focus
+on decisions and the flow between them. The sequence
+diagrams show who sends what to whom; these show what gets
+decided and what happens on each branch.
+
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=0.86\textwidth]{figures/activity-1-signup-moderation.png}
   \caption{Activity diagram (1 of 3): verification and
@@ -391,387 +442,573 @@ happens on each branch.''
   \label{fig:act1}
 \end{figure}
 
-Figure~\ref{fig:act1} shows two rejection loops that a
-purely happy-path design would have missed: a rejected
-ID card returns the student to re-upload, and a listing
-failing the completeness check returns to the form with
-validation errors. Only after both gates does a listing
-reach \texttt{pending\_review}, and only administrator
-approval moves it to \texttt{live}.
+Figure~\ref{fig:act1} contains two rejection loops that are
+easy to miss if you only think about the normal path. A
+rejected ID card sends the student back to upload a new one,
+and a listing that fails the completeness check goes back to
+the form with error messages. A listing only reaches
+\texttt{pending\_review} after passing both, and only an
+administrator's approval moves it to \texttt{live}.
 
-\begin{figure}[h]
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=0.72\textwidth]{figures/activity-2-transaction.png}
-  \caption{Activity diagram (2 of 3): negotiation,
-    payment, handoff and the lend return cycle.}
+  \caption{Activity diagram (2 of 3): negotiation, payment,
+    handover and the lend return cycle.}
   \label{fig:act2}
 \end{figure}
 
-In Figure~\ref{fig:act2} the transaction type is tested
-twice, and deliberately so. The first test, immediately
-after payment, asks whether lend-specific terms need to
-be recorded at all. The second, at handoff, asks whether
-a return leg must complete before the transaction can
-close. The two questions are distinct, occur at
-different times, and merging them would have produced
-the same defect the sequence model avoided.
+In Figure~\ref{fig:act2} the transaction type is checked
+twice, and that is intentional. The first check, right after
+payment, decides whether lend terms need to be recorded. The
+second, at the handover, decides whether the item still has
+to be returned before the deal can close. These are
+different questions asked at different times, and combining
+them would have caused the same mistake described above.
 
-\begin{figure}[h]
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{figures/activity-3-disputes.png}
-  \caption{Activity diagram (3 of 3): dispute
-    resolution and penalty application.}
+  \caption{Activity diagram (3 of 3): dispute resolution and
+    penalties.}
   \label{fig:act3}
 \end{figure}
 
-Figure~\ref{fig:act3} models dispute resolution around
-two decisions: whether the available evidence is
-sufficient to decide, which loops back to review if it
-is not, and whether either party is at fault. The
-evidence in question is concrete: the before-and-after
-condition photographs captured at handoff and return,
-which is what makes an adjudicated outcome possible at
-all.
+Figure~\ref{fig:act3} shows how a dispute is resolved. The
+administrator first decides whether there is enough evidence,
+and asks for more if there is not. They then decide whether
+either party is at fault. The evidence is the condition
+photographs taken at the handover and the return, which the
+administrator sees side by side.
 
 \section{Implementation Details}
+
 \subsection{Module 1: Verified Access and Identity}
-Identity is deliberately not built in-house. Signup uses
-a passwordless one-time password flow provided by the
-authentication service, which removes password storage,
-hashing and reset flows from our threat surface
-entirely.
 
-Restricting signup to the institution required work at
-two levels. The client validates the address before
-requesting a code, but a client-side check is
-cosmetic: a modified application, or a direct call to
-the public API, bypasses it. The enforcement that matters
-is a database trigger which raises an exception on any
-account whose address does not end in the institutional
-domain, aborting the insert transaction so that no
-account is created and no code is ever sent.
+We chose not to build our own login system. Students sign
+up with a one-time code sent to their email, so we never
+store passwords and don't need to handle hashing or password
+resets.
 
-The second identity component is the student ID card.
-The photograph is uploaded through the backend to a
-private bucket, namespaced by user so that no student can
-overwrite another's file, and the profile is marked
-awaiting review. An administrator later approves or
-rejects it. There is no optical character recognition or
-third-party document-verification vendor; a human makes
-the decision, which is both simpler and more defensible
-than an unvalidated automated classifier.
+Limiting sign-up to the college took two layers. The app
+checks the email address before asking for a code, but on
+its own that check means little, because a modified app or a
+direct call to the API can skip it. The check that actually
+protects the system is a database trigger that rejects any
+account whose email does not end in the college domain. The
+account is never created and no code is sent. A unique index
+also makes sure each roll number can only be used for one
+account.
 
-\subsection{Module 2: Listings and Moderation}
-A listing is a single entity with three type-specific
-shapes. Rather than three tables, one table carries a
-type discriminator and the columns relevant to each
-type: a price for sell, a rent amount and unit for
-lend, a set of wanted tags for exchange. The API
-validates that the fields required by the declared type
-are present, so a sell listing without a price is
-rejected at the boundary.
+The second part of identity is the student ID card. The
+photo is uploaded through the backend into a private bucket,
+under a file name the server chooses, and the profile is
+marked as waiting for review. An administrator opens it
+through a signed link that lasts ten minutes and approves or
+rejects it. A rejected student is notified and can upload a
+clearer photo. Until they are approved, students can browse
+but cannot list, chat or trade, and the server checks this
+on every trading request.
 
-Moderation is enforced structurally. Creation writes the
-listing at \texttt{pending\_review} and simultaneously
-inserts a row into the moderation queue; the public feed
-query returns only listings at \texttt{live}. A student
-therefore cannot publish directly, and this is a
-property of the data flow rather than of a rule that
-could be forgotten. The two writes are coupled: if the
-queue insert fails, the listing is rolled back, so the
-two tables cannot disagree about whether an item is
-awaiting review.
+\subsection{Module 2: Listings, Search and Moderation}
+
+All listings live in one table, whatever their type. A
+\texttt{type} column says whether it is a sale, a lend or an
+exchange, and the type decides which other fields are needed:
+a price for a sale, a rent amount and unit for a lend, and a
+list of wanted items for an exchange. The API checks that the
+right fields are present, so a sale without a price is
+rejected straight away. A listing can have up to six photos,
+and the meeting point has to be one of the 18 hostels and
+campus spots from the campus map.
+
+Students can search the feed by keyword, filter it by type
+and category, and page through it 20 listings at a time (at
+most 50 per request). They can also sort it by distance,
+which is the straight-line distance from their hostel to
+each listing's meeting point. We don't use GPS for this, so
+the app never asks for location permission.
+
+Moderation is built into how the data flows. A new listing is
+saved as \texttt{pending\_review}, and an entry is added to
+the moderation queue at the same time. The public feed only
+shows listings that are \texttt{live}, so there is simply no
+way for a student to publish directly. If adding the queue
+entry fails, the listing is rolled back as well. When an
+owner edits a live listing, it goes back for review.
+
+After mid-semester we added reporting. Any signed-in student
+can report a live listing, or a student they have chatted
+with, by choosing a reason and adding details. Each student
+can have only one open report on the same listing or person.
+Administrators see open reports grouped by what was
+reported. If they act on a report about a listing, the
+listing is taken down for good, and a database trigger
+stops it from ever coming back. Any deal on it that has not
+reached the handover is cancelled and refunded, all open
+reports on it are closed, and the owner, the reporters and
+both sides of any cancelled deal are notified.
 
 \subsection{Module 3: Chat and Structured Negotiation}
-Conversation is scoped to one thread per interested buyer
-per listing, enforced by a uniqueness constraint. Access
-is checked on every message operation: a caller who is
-neither party to a thread receives a forbidden response.
 
-The negotiation layer is what distinguishes this from a
-messaging application. An offer is a first-class record
-carrying a price, a status, and the identity of the party
-who proposed it. Either party may propose; only the
-other party may accept or reject, which is enforced in
-the service rather than the interface. Accepting one
-offer automatically rejects all other pending offers on
-that thread, so a thread cannot arrive at two
-simultaneously agreed prices. Once any offer is
-accepted, the thread is closed to further offers.
+Each buyer gets one chat thread per listing, which a
+uniqueness constraint enforces, and only verified students
+can start one. Every message and offer request checks that
+the caller is part of the thread. Anyone else gets a
+``forbidden'' response.
 
-The client merges messages and offers into a single
-timeline ordered by timestamp, so a negotiation reads in
-the order it actually happened.
+What makes this more than a messaging app is the offers. An
+offer is its own record with a price, a status and the
+person who made it. Either side can make an offer, but only
+the other side can accept or reject it, and this is checked
+on the server, not just hidden in the interface. When one
+offer is accepted, all other pending offers in that thread
+are rejected automatically, so a thread can never end up
+with two agreed prices. For exchanges, the student who wants
+to swap names and photographs the item they are offering,
+and either side can add a cash top-up and say who pays it.
 
-\subsection{Module 4: Administrative Review}
-The administrative surface is delivered inside the mobile
-application as a tab that appears only for accounts
-carrying the administrator role. It presents two queues:
-listings awaiting moderation, and student ID cards
-awaiting verification.
+Messages, offers and deal updates arrive through the
+database's real-time channel, with slow polling as a
+fallback. The real-time feed uses the student's own session,
+so row-level security still decides which rows each phone
+receives. The Chats tab marks threads that have something
+new and shows a count of unread chats on the tab itself.
 
-The role check on the client controls only the tab's
-visibility. Authorisation is enforced server-side by a
-guard that re-reads the caller's role from the database
-on every administrative request, so modifying the
-application to reveal the tab would not grant access to
-any administrative operation.
+\subsection{Module 4: Transactions, Escrow and QR Handover}
 
-Because the ID-card bucket is private, the review screen
-cannot simply link to an image. The backend issues a
-signed URL valid for ten minutes per card, so
-administrators can view exactly what they need to review
-and nothing persists as a shareable link afterwards.
+When the owner finalises the agreed terms, the system creates
+a transaction at exactly the agreed price and confirms the
+meeting point. For a lend, it also records the start date,
+end date, deposit and daily rent. The listing is then marked
+\texttt{reserved}, and the buyer pays into escrow. In the
+pilot the gateway is simulated, so the hold is recorded but
+no money actually moves.
+
+At the meeting, the person handing over the item shows a QR
+code on their phone. The code is random, works only once,
+belongs to that one transaction and expires after ten
+minutes. If it expires, they can show a new one, and the old
+one stops working. The person receiving the item first takes
+a photo of it and then scans the code. A valid scan uses up
+the code, and for a sale or exchange it completes the
+transaction and releases the escrow. Instead of scanning,
+either person can report a problem, which marks the
+transaction as disputed and freezes the money. Before the
+handover, either side can cancel, which refunds the escrow
+and puts the listing back in the feed. Once the item has
+changed hands, nobody can cancel.
+
+A lend stays open after the handover. The borrower gets a
+reminder the day before the due date, overdue items are
+flagged, and the return is confirmed with a second QR scan
+and a second set of condition photos. If nothing is wrong
+with the returned item, the rent is settled and the deposit
+is refunded. All due dates are worked out in Indian time
+rather than the server's time. Section~\ref{sec:analysis}
+explains the bug that taught us to do this.
+
+\subsection{Module 5: Disputes, Notifications and Administration}
+
+Each transaction can have one dispute, with a reason.
+Administrators see open disputes with the handover and return
+photos side by side. They can ask for more evidence, and they
+settle the case by either releasing the money to the seller
+or refunding the buyer. They can also apply one of three
+fixed penalties (Rs.~50, Rs.~200 or Rs.~500) to whoever was at
+fault. Both people are notified each time the dispute
+changes.
+
+Notifications are stored for each user with a type, some
+details and a read flag. They cover listing decisions,
+messages, offers, deal updates, disputes, reports and
+category alerts. Once a Firebase project is connected to the
+Android build, they can also be sent as phone notifications
+through Expo's push service.
+
+Administrators work from the \emph{Review} tab, which only
+appears for accounts with the admin role. It has queues for
+listings, ID cards, reports and disputes, and a dashboard with
+the metrics from our proposal: TLC (median, 90th percentile
+and the share decided within 24 hours), listings by type,
+completion rate, the share of deals that are lends, the
+on-time return rate and dispute rates. Hiding the tab is only
+for convenience. The real check is a guard that reads the
+user's role from the database on every admin request.
+
+\subsection{Module 6: Security Hardening and Interface}
+
+Before deploying, we deliberately tried to misuse our own API
+and then fixed what we found. A photo is now accepted only if
+its actual contents are a JPEG, PNG, WebP or HEIC image,
+whatever the file name says. Uploads are stopped as soon as
+they pass 8 MB, a listing can only use photos its owner
+uploaded, and the server picks every file name. Each
+signed-in session is rate limited to 120 requests and 30
+writes a minute, 20 new listings an hour and 40 photo uploads
+every ten minutes. Responses carry standard security headers,
+and browser access can be limited to the app's own website.
+Continuous integration fails if a package we ship has a known
+high or critical vulnerability.
+
+In the second half of the semester we also redesigned the
+interface around a sage green, off-white and tomato red
+colour scheme with light, slightly see-through cards. We kept
+animation to a minimum, and it turns off completely when the
+phone's reduce-motion setting is on. Figure~\ref{fig:screens}
+shows the main screens, taken from the deployed app on one of
+our phones.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/screens-student.png}\\[0.3cm]
+  \includegraphics[width=\textwidth]{figures/screens-deal-admin.png}
+  \caption{Screens from the deployed Android app:
+    (a)~the feed, (b)~a listing, (c)~a chat with structured
+    offers, (d)~a completed deal with condition photos,
+    (e)~the profile with verified college credentials and
+    (f)~the admin metrics dashboard.}
+  \label{fig:screens}
+\end{figure}
+
+\subsection{Module 7: Deployment}
+
+The system now runs without any of our laptops. The backend
+is deployed on Render's free tier straight from our GitHub
+repository and redeploys whenever we push, with its secret
+keys stored in Render's settings. The website, which is also
+the admin dashboard, is exported as a static site and hosted
+on EAS Hosting. The Android app is built with EAS Build as an
+installable file that talks to the deployed backend. A proper
+iPhone app would need a paid Apple developer account, so for
+the pilot iPhone users can use the website instead.
 
 % ===== CHAPTER 3: RESULTS & EVALUATION =====
-\chapter{Results and Evaluation}
+
+\chapter{Results and Evaluation}\label{ch:results}
+
 \section{Testing Methodology}
-Verification at this stage was functional and
-structural rather than performance-oriented; the system
-has not yet been deployed or subjected to concurrent
-load, so latency and throughput figures would not be
-meaningful. The following were carried out:
+
+Every functional requirement that we built has at least one
+test case; the only one without is FR-AUTH-10, which we did
+not build. We named each automated test after the requirement it
+checks, for example \texttt{FR-PAY-7 · the buyer or the
+seller can cancel before the handoff}, so the test results
+can be read directly against the requirements.
 
 \begin{itemize}
-  \item \textbf{Static verification:} The entire mobile
-    codebase type-checks under the TypeScript compiler
-    in strict mode, and the backend compiles cleanly.
-    Both checks run automatically on every push through
-    a GitHub Actions workflow, so a change that breaks
-    either is caught before review.
-  \item \textbf{Build verification:} The mobile
-    application was bundled for Android on every
-    significant change, confirming that all modules
-    resolve and that no dependency is missing from the
-    dependency graph.
-  \item \textbf{Authorisation testing:} Every protected
-    endpoint was exercised without a token, and with a
-    deliberately invalid token, confirming rejection in
-    each case. Guest-accessible endpoints were verified
-    to succeed without a token while still withholding
-    the meeting location.
-  \item \textbf{Integration testing:} The moderation
-    loop was exercised end to end on a real device:
-    create a listing, observe it held at
-    \texttt{pending\_review} and absent from the public
-    feed, approve it from the administrative queue, and
-    observe it appear.
-  \item \textbf{User testing:} Conducted informally
-    within the project group on physical devices over a
-    shared network. Several defects surfaced this way
-    that static checks could not have caught, discussed
-    in Section~3.3.
+  \item \textbf{Unit Testing:} 35 unit tests cover logic that
+    can be checked on its own. In the backend these are the
+    image content check, the rate-limit rules, campus dates,
+    want-tag matching and the guard that only lets verified
+    students trade. In the app they cover email validation,
+    date handling and distance formatting.
+  \item \textbf{Integration Testing:} 344 end-to-end tests
+    start the built backend and call it over HTTP as real
+    test users, against a real PostgreSQL database created
+    from all twelve migrations with row-level security
+    switched on. They cover every implemented requirement,
+    including access control (calling protected endpoints
+    without a token, with a fake token and as the wrong
+    user), every state a deal can move through, and the
+    security requirements. GitHub Actions runs them on every
+    push, along with linting, type checks and a dependency
+    audit.
+  \item \textbf{Performance Testing:} We timed the main
+    endpoints over 200 requests each and loaded the feed with
+    ten clients at once for ten seconds
+    (Section~\ref{sec:metrics}). We still need to load test
+    the deployed system with real pilot traffic.
+  \item \textbf{User Testing:} 16 manual test cases cover
+    things that need a real phone and a real person, such as
+    receiving the email code, staying signed in, scanning a
+    QR code with the camera, chatting live between two
+    phones, checking the screens and receiving phone
+    notifications. The team runs these and records the
+    tester, date and result in our test-case sheet. Using the
+    app on our own phones throughout the project also caught
+    several bugs that automated tests could not, which we
+    describe in Section~\ref{sec:analysis}.
 \end{itemize}
 
-\section{Delivered Functionality}
-Table~\ref{tab:delivered} summarises the status of each
-module against the original proposal.
+\section{Performance Metrics}\label{sec:metrics}
 
-\begin{table}[h]
+Table~\ref{tab:performance} lists our results. We measured
+response times on a test copy of the system, with the
+backend and database on the same machine and a small test
+dataset. The numbers therefore show how long the backend
+itself takes, without the network delay a student would get
+on campus Wi-Fi. They are far below the SRS target, which
+leaves plenty of room for that delay.
+
+\begin{table}[htbp]
 \centering
-\begin{tabular}{|l|c|}
+\begin{tabular}{|l|r|r|}
   \hline
-  \textbf{Module} & \textbf{Status} \\
+  \textbf{Metric} & \textbf{Target} &
+  \textbf{Achieved} \\
   \hline
-  Verified signup (OTP + roll number + ID) & Implemented \\
+  Feed, 95th percentile response & $< 1.5$\,s & $8$\,ms \\
   \hline
-  Domain restriction (database-enforced) & Implemented \\
+  Keyword search, 95th percentile & $< 1.5$\,s & $9$\,ms \\
   \hline
-  Listing feed, search, category filter & Implemented \\
+  Listing detail, 95th percentile & $< 1.5$\,s & $16$\,ms \\
   \hline
-  Guest browsing (location withheld) & Implemented \\
+  Send a chat message, 95th percentile & No target & $31$\,ms \\
   \hline
-  Listing creation, all three types & Implemented \\
+  Feed throughput, 10 clients at once & No target & $489$ req/s \\
   \hline
-  Photograph upload & Implemented \\
+  Functional requirements with a test case & 100\% & 99\% (80 of 81) \\
   \hline
-  Moderation queue and review & Implemented \\
+  Automated tests passing & 100\% & 100\% (379 of 379) \\
   \hline
-  Administrative ID verification & Implemented \\
-  \hline
-  Chat and structured negotiation & Implemented \\
-  \hline
-  Payments and escrow & Designed \\
-  \hline
-  QR-verified handoff & Designed \\
-  \hline
-  Lend return and disputes & Designed \\
-  \hline
-  Push notifications & Designed \\
+  Time to run all end-to-end tests & No target & $34$\,s \\
   \hline
 \end{tabular}
-\caption{Module delivery status at mid-semester
-  evaluation. ``Designed'' denotes fully modelled in UML
-  with database support present, but not yet
-  implemented.}
+\caption{Performance and testing results. The response-time
+  target comes from SRS 2.1 (NFR-PRF-1). Response times were
+  measured without campus network delay.}
+\label{tab:performance}
+\end{table}
+
+Of the 81 functional requirements, 73 are covered by
+automated tests (10 of these also have a manual check) and 6
+only by manual test cases. The remaining 2 were not built.
+One is checking roll numbers against an official student
+list (FR-AUTH-10), which we don't have access to. The other
+is an automatic moderation score (FR-MOD-7). Both are low
+priority, and for FR-MOD-7 we test that every listing still
+goes to a human reviewer. Of the 37 non-functional
+requirements, 17 pass automated tests, 9 are checked in CI or
+by reading the code, and 2 are covered by manual cases.
+Another 7 can only be measured once the pilot is running
+(load, uptime, usability and performance on budget phones),
+and 2 do not have a test case yet.
+
+The metrics in our proposal, such as time to listing
+clearance (target: a median of four hours or less),
+completion rate, lend share, dispute rate and how clear
+students find the deal status, depend on real students using
+the app. The system records the timestamps behind them and
+the admin dashboard already calculates them, but the planned
+pilot with 30 to 40 students has not happened yet, so we do
+not report pilot figures here.
+
+\section{Analysis}\label{sec:analysis}
+
+\textbf{Objectives met.} We met all seven objectives, with
+payments simulated for the pilot. Table~\ref{tab:delivered}
+compares each module at mid-semester and now. Everything that
+was only designed at mid-semester has since been built and
+tested.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{|l|c|c|}
+  \hline
+  \textbf{Module} & \textbf{Mid-semester} & \textbf{Now} \\
+  \hline
+  Verified sign-up (code, roll number, ID card) & Implemented & Implemented \\
+  \hline
+  Feed, search, filters, sort by distance & Partial & Implemented \\
+  \hline
+  Listings (all three types) and moderation & Implemented & Implemented \\
+  \hline
+  Reports and admin takedown & Not planned & Implemented \\
+  \hline
+  Chat and structured negotiation & Implemented & Implemented \\
+  \hline
+  Real-time delivery & Polling & Implemented \\
+  \hline
+  Payments and escrow & Designed & Simulated gateway \\
+  \hline
+  QR-verified handover and condition photos & Designed & Implemented \\
+  \hline
+  Lend return cycle and reminders & Designed & Implemented \\
+  \hline
+  Disputes and penalties & Designed & Implemented \\
+  \hline
+  Notifications and category alerts & Designed & In-app; push ready \\
+  \hline
+  Metrics dashboard & Not planned & Implemented \\
+  \hline
+  Row-level security & Not enabled & Enabled \\
+  \hline
+  Automated tests and CI & Build check only & 379 tests \\
+  \hline
+  Deployment & Local only & Deployed \\
+  \hline
+\end{tabular}
+\caption{Status of each module at mid-semester and at the end
+  of the semester.}
 \label{tab:delivered}
 \end{table}
 
-Nine of thirteen modules are implemented. Five of the
-thirteen database tables are exercised by delivered
-code; the remaining eight support the deferred
-transaction core and already exist, so no schema
-migration will be required when that work begins.
+\textbf{What we added beyond the plan.} Several features were
+not in our original proposal: browsing as a guest with the
+meeting location hidden, sorting by distance from your
+hostel without needing location permission, swap offers with
+photos and a cash top-up, reporting and takedown, and a full
+test suite tied to the requirements. Each of these is
+recorded in the SRS as a documented change from the
+proposal.
 
-\section{Analysis}
-\textbf{Objectives met.} Objectives~1 through~4 are
-fully met. Verified access is enforced at the database
-level rather than only in the client; the unified feed
-covers all three transaction types; no listing can reach
-the public feed without administrative approval; and
-negotiation produces structured, stored offers rather
-than free text. Objective~5 is met in full: the complete
-system, including the deferred modules, is specified
-across the diagrams presented in Section~2.1.3.
+\textbf{Where we fell short.} Payments are still simulated.
+The escrow rules are complete and tested, but connecting a
+real gateway such as Razorpay was not possible in a free,
+one-semester project. Photos are not compressed before
+upload yet. We also have not run the pilot with real
+students, so the proposal's metrics are still unmeasured.
 
-\textbf{Where the work exceeded the plan.} Guest
-browsing was not in the original proposal. It emerged
-from the use case model, which showed browsing available
-to any signed-up student, and was extended so that
-unauthenticated visitors can evaluate the marketplace
-before committing to verification. The privacy
-concern this raised, that meeting locations would
-become publicly visible, was resolved by withholding
-that single field server-side rather than by abandoning
-the feature.
-
-\textbf{Challenges encountered.} Three are worth
-recording.
+\textbf{Challenges we ran into.} These were the ones we
+learned the most from.
 
 \begin{itemize}
-  \item \textbf{Framework-level file upload failure.}
-    Image upload failed consistently with an opaque
-    error. The cause was that the mobile framework had
-    replaced the standard network primitive with its own
-    implementation, which rejects the conventional
-    file-attachment format. Resolution required reading
-    the framework's own source to determine the accepted
-    shape, then adopting its file abstraction.
-  \item \textbf{Silent build failure.} The backend build
-    tool was configured to clear its output directory
-    before compiling. When that step failed, the build
-    reported success while leaving stale output in place,
-    so newly added routes appeared to compile but
-    returned not-found at runtime. Diagnosis required
-    inspecting the compiled output rather than trusting
-    the build's exit status.
-  \item \textbf{Authentication email delivery.} The
-    platform's built-in mail service is rate-limited and,
-    for newer projects, does not permit template
-    customisation, meaning verification emails
-    contained a link rather than the numeric code our
-    flow expects. Resolution required configuring an
-    external mail provider and rewriting both email
+  \item \textbf{Photo uploads failing.} Image uploads kept
+    failing with an unclear error. The cause was that the
+    mobile framework replaces the standard network code with
+    its own version, which does not accept files in the usual
+    format. We only worked this out by reading the
+    framework's source code, and then switched to its own
+    file format.
+  \item \textbf{Sign-in emails not arriving.} The platform's
+    built-in email service only sends to members of the
+    project team, at two emails an hour, and could not send
+    the numeric code our sign-in needs. We fixed this by
+    using our own SMTP provider and rewriting the email
     templates.
+  \item \textbf{Holes we found by attacking our own API.}
+    When we tried to misuse the API on purpose, we found that
+    it accepted any file that claimed to be an image,
+    accepted oversized uploads, and let a listing use another
+    user's photos. We fixed all three and added tests for
+    them.
+  \item \textbf{A time-zone bug.} A test for lend reminders
+    only failed after midnight. Dates were being calculated
+    in UTC, which is still the previous day between midnight
+    and 5:30 am in India, so for those hours due dates and
+    reminders were a day early. We now calculate all campus
+    dates in Indian time, and the tests pass in both time
+    zones.
+  \item \textbf{An admin action that skipped the rules.}
+    While testing takedowns, we noticed that approving or
+    rejecting a listing did not check what state it was in,
+    so an administrator could bring a removed listing back.
+    Both actions now only work on listings waiting for
+    review, and a database trigger keeps taken-down listings
+    off the feed.
+  \item \textbf{A typing bug on Android.} After the redesign,
+    the text boxes on Android kept passing focus from one to
+    the next in a loop, so nobody could type. The box changed
+    its style when it was tapped, which made Android rebuild
+    it and pass focus on. Now the box keeps the same style
+    when tapped. This bug never showed up in the web preview,
+    only on a real phone.
 \end{itemize}
 
-Each of these was a defect in an assumption about a
-dependency rather than in our own logic, which is itself
-a finding: the integration points, not the application
-code, consumed the majority of debugging effort.
+Just like at mid-semester, most of these problems came from
+the places where our code meets something else, such as the
+framework, the email service, the server's clock or Android's
+focus handling, rather than from the marketplace logic
+itself.
 
 % ===== CHAPTER 4: CONCLUSION =====
-\chapter{Conclusion}
-\section{Summary of Work}
-We set out to build a campus-verified marketplace in
-which identity is checked against the institution, every
-listing is reviewed before publication, and price
-agreement is recorded by the system. At the mid-semester
-point, that core is working: a student signs up with an
-institutional address and a one-time code, supplies a
-roll number and an ID card photograph, and browses a
-feed covering all three transaction types. They can post
-an item with photographs and a campus meeting point,
-which enters a moderation queue and appears publicly
-only once an administrator approves it. They can open a
-conversation on any listing and negotiate through
-structured offers until a price is agreed.
 
-Alongside the implementation, the complete system (including
-payments, QR-verified handoff, and dispute
-resolution) has been specified across four UML diagram
-types, so the remaining work proceeds from a validated
-design.
+\chapter{Conclusion}
+
+\section{Summary of Work}
+
+We set out to build a marketplace where everyone is a
+verified Thapar student, every listing is checked before it
+goes public, and every deal has some protection behind it.
+That system is now complete and deployed. A student signs up
+with their college email and a one-time code, adds a unique
+roll number and a photo of their ID card, and once an
+administrator approves them, they can buy, sell, lend and
+swap. Listings are reviewed before they go live and can be
+reported and taken down later. Prices and swaps are agreed
+through structured offers in a real-time chat. The payment
+stays in escrow until the buyer scans a one-time QR code at
+a campus meeting point. Both sides photograph the item at the
+handover and the return, lend periods and deposits are
+tracked, and an administrator settles disputes by looking at
+those photos.
+
+The system is described by SRS version 2.1 (81 functional and
+37 non-functional requirements), modelled with four types of
+UML diagram, checked by 379 automated tests and 16 manual
+test cases, and deployed for free as an Android app and a
+website.
 
 \section{Key Findings}
+
 \begin{itemize}
-  \item \textbf{Finding 1:} Enforcing a constraint in the
-    interface is not enforcing it at all. The
-    institutional-domain restriction, the administrator
-    role check, and the ownership check on deletion each
-    began as client-side logic and each had to be moved
-    into the database or the API guard layer before it
-    became a real guarantee.
-  \item \textbf{Finding 2:} Modelling caught design
-    errors that implementation would have shipped. The
-    lend return cycle, drawn as an alternative branch in
-    the sequence and activity models, revealed that
-    reusing the sell settlement path would have marked
-    borrowed items complete at handoff, before their
-    return.
-  \item \textbf{Finding 3:} Integration cost dominated.
-    The three most time-consuming defects all arose at
-    boundaries with external dependencies (the mobile
-    framework's network layer, the backend build tool,
-    and the authentication provider's mail service)
-    rather than within our own logic.
-  \item \textbf{Finding 4:} Structural enforcement of
-    moderation proved simpler than a policy. Because the
-    feed query filters on published status and creation
-    writes an unpublished one, there is no code path
-    through which an unreviewed listing can become
-    visible.
+  \item \textbf{Finding 1:} A rule that only exists in the
+    app is not really a rule. The college email check, the
+    admin role, verified-only trading and listing ownership
+    only became reliable once we enforced them in the
+    database or in a guard on the server.
+  \item \textbf{Finding 2:} Modelling caught mistakes before
+    we wrote the code. Drawing the lend return as a separate
+    branch showed that reusing the sale path would have
+    closed lend deals before the item came back. Because we
+    built the second half against the diagrams, it held very
+    few surprises.
+  \item \textbf{Finding 3:} Naming tests after requirements
+    made gaps easy to spot. Since every test carries its
+    requirement's ID, we could find missing tests, and SRS
+    wording that no longer matched the code, just by reading
+    one generated table.
+  \item \textbf{Finding 4:} Connecting to other systems took
+    the most effort. Our hardest bugs came from the
+    framework, outside services and the phone platform
+    rather than our own code, and some only appeared on a
+    real phone or at a certain time of day.
 \end{itemize}
 
 \section{Future Work and Recommendations}
+
 \begin{enumerate}
-  \item \textbf{Complete the transaction core.}
-    Implement escrow, QR-verified handoff, condition
-    photographs and the lend return cycle. The schema and
-    the models already exist; this is implementation
-    against a settled design~\cite{latex2e}.
-  \item \textbf{Enable row-level security.} All tables
-    are currently unrestricted. Because the client never
-    queries tables directly and the backend holds a
-    privileged key, policies can be enabled without
-    altering application behaviour, and it should be done
-    before any wider release.
-  \item \textbf{Replace polling with real-time
-    transport.} Chat currently refreshes on a fixed
-    interval. A socket-based transport would reduce both
-    latency and unnecessary requests.
-  \item \textbf{Deploy the backend.} The API presently
-    runs locally, which constrains testing to a shared
-    network. A hosted deployment would allow genuine
-    multi-user testing and, in turn, the performance
-    measurement absent from this report.
-  \item \textbf{Proximity-aware discovery.} The proposal
-    envisaged ordering the feed by nearness to the
-    viewer's hostel. Listings already record a meeting
-    point; the viewer's own location is not yet stored,
-    and adding it would complete the feature.
+  \item \textbf{Run the pilot.} Put the deployed app in front
+    of 30 to 40 students and two or three volunteer
+    moderators, as planned in the proposal, and report the
+    metrics that the dashboard already calculates.
+  \item \textbf{Connect a real payment gateway.} Holding,
+    releasing and refunding escrow are three functions in
+    the backend. Replacing them with a gateway's escrow or
+    split-payment feature is the main step needed for real
+    money.
+  \item \textbf{Over-the-air updates and an iPhone app.}
+    Adding Expo's update service would let us send fixes to
+    installed phones without a reinstall. Publishing on the
+    App Store needs an Apple developer account.
+  \item \textbf{Compress photos before uploading} to save
+    students' mobile data (NFR-PRF-4).
+  \item \textbf{Automatic moderation and roll number checks.}
+    An automatic moderation score could help order the review
+    queue (without ever rejecting a listing on its own), and
+    an official student list, if the college can share one,
+    could be used to confirm roll numbers.
+  \item \textbf{Load testing and monitoring} of the deployed
+    system, to measure response times and uptime under real
+    campus traffic.
 \end{enumerate}
 
 \section{Final Remarks}
-The most instructive lesson of this phase concerned
-where trust actually lives in a software system. Every
-safety property the proposal promised (that users are
-real students, that listings are reviewed, that only the
-owner can remove a listing) was straightforward to
-express in the interface and consistently harder to
-guarantee underneath it. In each case the version that
-held was the one enforced closest to the data.
 
-The second lesson concerned the value of modelling
-ahead of code. The diagrams in this report were not
-documentation produced after the fact; they exposed
-branches, loops and failure paths that the
-implementation would otherwise have discovered late, and
-the deferred half of the system is consequently in a
-position to be built from a specification rather than
-from assumption.
+The biggest lesson from this project was about where trust
+really comes from in software. Every safety promise in our
+proposal, such as only real students, only reviewed listings
+and money held until the item changes hands, was easy to show
+in the interface and much harder to actually guarantee
+behind it. Each time, the version that worked was the one
+enforced closest to the data.
 
-% ===== BIBLIOGRAPHY =====
-% Print bibliography with heading in TOC
-\printbibliography[heading=bibintoc]
+The second lesson was about proof. The diagrams told us what
+to build, and the tests told us whether we had built it.
+Naming every test after a requirement turned ``we think it
+works'' into a table that anyone can check. The system is not
+large, but every promise it makes is written down, enforced
+on the server and tested.
+
 \end{document}
